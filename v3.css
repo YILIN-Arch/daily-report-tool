@@ -709,7 +709,9 @@ dd {
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: var(--v3-space-md);
   width: min(680px, 100%);
-  height: 100%;
+  height: 100svh;
+  max-height: 100svh;
+  overflow: hidden;
   border-left: 1px solid var(--v3-hairline);
   padding: var(--v3-space-lg);
   background: rgba(248, 250, 252, 0.96);
@@ -737,8 +739,13 @@ dd {
 }
 
 .v3-editor-actions {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   gap: var(--v3-space-xs);
+  padding-bottom: 2px;
+  background: rgba(248, 250, 252, 0.96);
 }
 
 .v3-editor-actions button,
@@ -766,8 +773,28 @@ dd {
 .v3-editor-scroll {
   display: grid;
   gap: var(--v3-space-md);
+  min-height: 0;
+  max-height: 100%;
   overflow: auto;
-  padding-right: 4px;
+  overscroll-behavior: contain;
+  padding-right: 8px;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.v3-editor-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.v3-editor-scroll::-webkit-scrollbar-track {
+  background: rgba(23, 24, 28, 0.06);
+  border-radius: 999px;
+}
+
+.v3-editor-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(248, 250, 252, 0.96);
+  border-radius: 999px;
+  background: rgba(23, 24, 28, 0.24);
 }
 
 .v3-editor-section {
