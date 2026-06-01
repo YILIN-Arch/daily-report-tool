@@ -1,0 +1,189 @@
+{
+  "generatedAt": "2026-06-01T07:17:16.602Z",
+  "sourceFile": "早会/27-05-2026.pptx",
+  "sourceDate": "2026-05-27",
+  "report_header": {
+    "section_key": "report_header",
+    "title": "Morning Meeting Report",
+    "scope": "Site C scope",
+    "subject": "Regarding the Defect of the Sport Centre & the Outdoor Sport Field",
+    "reporter": "Yilin Li",
+    "date": "Wed. 27/05/2026",
+    "source_slide": 2
+  },
+  "sections": [
+    {
+      "section_key": "hacking_progress",
+      "title": "Hacking Progress",
+      "subtitle": "SPC 2/F打鑿進度",
+      "source_slide": 5,
+      "metrics": [
+        {
+          "label": "Total",
+          "value": "956m²"
+        },
+        {
+          "label": "Actual to date",
+          "value": "668m²"
+        },
+        {
+          "label": "Progress",
+          "value": "69%"
+        },
+        {
+          "label": "Last week",
+          "value": "64%"
+        },
+        {
+          "label": "Current Rate",
+          "value": "15m²/d"
+        },
+        {
+          "label": "Remaining",
+          "value": "288m²"
+        },
+        {
+          "label": "Forecast",
+          "value": "17/06"
+        }
+      ]
+    },
+    {
+      "section_key": "plaster_progress",
+      "title": "Plaster Progress",
+      "subtitle": "SPC 2/F批盪進度",
+      "source_slide": 6,
+      "metrics": [
+        {
+          "label": "Total",
+          "value": "956m²"
+        },
+        {
+          "label": "Actual to date",
+          "value": "630m²"
+        },
+        {
+          "label": "Progress",
+          "value": "67%"
+        },
+        {
+          "label": "Remaining",
+          "value": "326m²"
+        }
+      ]
+    },
+    {
+      "section_key": "fountain_programme",
+      "title": "Fountain Programme",
+      "source_slide": 7,
+      "checklist": [
+        {
+          "label": "Hacking",
+          "status": "Completed",
+          "checked": true
+        },
+        {
+          "label": "Waterproofing",
+          "status": "Completed",
+          "checked": true
+        },
+        {
+          "label": "Water test",
+          "status": "28/05",
+          "checked": false
+        },
+        {
+          "label": "Plaster",
+          "status": "29-30/05",
+          "checked": false
+        },
+        {
+          "label": "S.S. Tank",
+          "status": "Arrival 30/05",
+          "checked": false
+        },
+        {
+          "label": "Pipe Works",
+          "status": "",
+          "checked": false
+        },
+        {
+          "label": "Pedestal",
+          "status": "",
+          "checked": false
+        },
+        {
+          "label": "Stone",
+          "status": "",
+          "checked": false
+        }
+      ]
+    },
+    {
+      "section_key": "clp_draw_pit",
+      "title": "CLP draw pit",
+      "source_slide": 8,
+      "metrics": [
+        {
+          "label": "Commence",
+          "value": "05/19"
+        },
+        {
+          "label": "Target",
+          "value": "09/06"
+        },
+        {
+          "label": "Progress",
+          "value": "37.5%"
+        },
+        {
+          "label": "As of",
+          "value": "27/05/2026"
+        }
+      ]
+    },
+    {
+      "section_key": "additional_works",
+      "title": "Additional Works",
+      "subtitle": "後加工程",
+      "source_slide": 9,
+      "table": [
+        {
+          "works": "Parasol",
+          "status": "底座 26/05 到貨"
+        },
+        {
+          "works": "Eco Trail Signage",
+          "status": "星輝 - 預 02/06 到料安裝"
+        },
+        {
+          "works": "Eco Trail 石龍",
+          "status": "宏業 - 預 04/06 到料安裝"
+        },
+        {
+          "works": "接水盤改善工程",
+          "status": "Site tender Drafted for further comment"
+        },
+        {
+          "works": "Awning",
+          "status": "TBC"
+        }
+      ]
+    },
+    {
+      "section_key": "defect",
+      "title": "Defect",
+      "source_slide": 10,
+      "table": [
+        {
+          "works": "EVA 車路瓦",
+          "status": ""
+        },
+        {
+          "works": "DCB 石",
+          "status": "closed"
+        }
+      ]
+    }
+  ]
+}

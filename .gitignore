@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.DS_Store
+outputs/
+.env
+.env.*
+/data/
+/api/
+/supabase/
+/meta-man-trading-perspective/
+/_Legal Frame PPT/
+/早会/
+/绿色.pptx
