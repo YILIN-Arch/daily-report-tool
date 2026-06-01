@@ -228,7 +228,7 @@ function renderReport() {
         <span>Morning Meeting Report</span>
       </a>
       <nav class="v3-actions" aria-label="Report version">
-        <span>V3</span>
+        <span>V3.1</span>
       </nav>
     </header>
 

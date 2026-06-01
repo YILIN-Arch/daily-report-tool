@@ -6,13 +6,17 @@
   --v3-ink-muted: #d0d6e0;
   --v3-ink-subtle: #8a8f98;
   --v3-ink-tertiary: #62666d;
+  --v3-card-ink: #17181c;
+  --v3-card-muted: #3f4652;
+  --v3-card-subtle: #667085;
+  --v3-card-tertiary: #8a94a5;
   --v3-canvas: #010102;
-  --v3-surface-1: rgba(15, 16, 17, 0.82);
-  --v3-surface-2: rgba(20, 21, 22, 0.86);
-  --v3-surface-3: rgba(24, 25, 26, 0.76);
-  --v3-surface-inset: rgba(1, 1, 2, 0.6);
-  --v3-hairline: rgba(255, 255, 255, 0.09);
-  --v3-hairline-strong: rgba(255, 255, 255, 0.16);
+  --v3-surface-1: rgba(248, 250, 252, 0.88);
+  --v3-surface-2: rgba(238, 242, 248, 0.9);
+  --v3-surface-3: rgba(31, 41, 55, 0.14);
+  --v3-surface-inset: rgba(255, 255, 255, 0.6);
+  --v3-hairline: rgba(15, 23, 42, 0.16);
+  --v3-hairline-strong: rgba(15, 23, 42, 0.24);
   --v3-success: #27a644;
   --v3-radius: 8px;
   --v3-space-xs: 8px;
@@ -43,8 +47,7 @@ body {
   line-height: 1.5;
 }
 
-body::before,
-body::after {
+body::before {
   position: fixed;
   inset: 0;
   pointer-events: none;
@@ -54,14 +57,7 @@ body::after {
 body::before {
   z-index: -2;
   background: url("/images/gopark-background.jpg") center top / cover no-repeat;
-  opacity: 0.32;
-}
-
-body::after {
-  z-index: -1;
-  background:
-    linear-gradient(180deg, rgba(1, 1, 2, 0.02) 0%, rgba(1, 1, 2, 0.28) 32%, rgba(1, 1, 2, 0.74) 76%, #010102 100%),
-    linear-gradient(90deg, rgba(1, 1, 2, 0.54) 0%, rgba(1, 1, 2, 0.12) 48%, rgba(1, 1, 2, 0.52) 100%);
+  opacity: 0.65;
 }
 
 a {
@@ -111,9 +107,9 @@ dd {
   align-items: center;
   justify-content: space-between;
   gap: var(--v3-space-md);
-  border-bottom: 1px solid var(--v3-hairline);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   padding: 0 var(--v3-space-xl);
-  background: rgba(1, 1, 2, 0.68);
+  background: rgba(1, 1, 2, 0.72);
   backdrop-filter: blur(16px);
 }
 
@@ -149,7 +145,8 @@ dd {
   border: 1px solid var(--v3-hairline);
   border-radius: 999px;
   padding: 6px 10px;
-  background: rgba(15, 16, 17, 0.68);
+  background: rgba(15, 16, 17, 0.7);
+  color: var(--v3-ink);
   text-decoration: none;
   backdrop-filter: blur(12px);
 }
@@ -182,8 +179,8 @@ dd {
   border: 1px solid var(--v3-hairline);
   border-radius: var(--v3-radius);
   background: var(--v3-surface-1);
-  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.18);
-  backdrop-filter: blur(18px);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(14px);
 }
 
 .v3-rail-block {
@@ -193,14 +190,14 @@ dd {
 }
 
 .v3-rail-block strong {
-  color: var(--v3-ink);
+  color: var(--v3-card-ink);
   font-size: 18px;
   font-weight: 600;
 }
 
 .v3-rail-block span {
   overflow-wrap: anywhere;
-  color: var(--v3-ink-subtle);
+  color: var(--v3-card-subtle);
   font-size: 13px;
 }
 
@@ -223,19 +220,19 @@ dd {
 }
 
 .v3-rail-item span {
-  color: var(--v3-ink-muted);
+  color: var(--v3-card-muted);
   font-size: 13px;
 }
 
 .v3-rail-item strong {
-  color: var(--v3-ink);
+  color: var(--v3-card-ink);
   font-size: 26px;
   font-weight: 600;
   line-height: 1;
 }
 
 .v3-rail-item small {
-  color: var(--v3-ink-tertiary);
+  color: var(--v3-card-tertiary);
   font-size: 12px;
 }
 
@@ -244,7 +241,7 @@ dd {
 }
 
 .v3-hero {
-  border-bottom: 1px solid var(--v3-hairline);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
   padding: var(--v3-space-xl) 0 var(--v3-space-xxl);
 }
 
@@ -255,6 +252,14 @@ dd {
   font-weight: 600;
   letter-spacing: 0;
   text-transform: uppercase;
+  text-shadow: 0 1px 14px rgba(0, 0, 0, 0.5);
+}
+
+.v3-rail .v3-eyebrow,
+.v3-progress-card .v3-eyebrow,
+.v3-panel .v3-eyebrow {
+  color: var(--v3-primary);
+  text-shadow: none;
 }
 
 .v3-hero h1 {
@@ -267,6 +272,7 @@ dd {
   line-height: 1.06;
   letter-spacing: 0;
   text-wrap: pretty;
+  text-shadow: 0 2px 22px rgba(0, 0, 0, 0.58);
 }
 
 .v3-hero > p:not(.v3-eyebrow) {
@@ -276,6 +282,7 @@ dd {
   font-size: 20px;
   line-height: 1.45;
   text-wrap: pretty;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.48);
 }
 
 .v3-meta {
@@ -291,7 +298,7 @@ dd {
   border-radius: 999px;
   padding: 5px 10px;
   background: var(--v3-surface-1);
-  color: var(--v3-ink-subtle);
+  color: var(--v3-card-muted);
   font-size: 13px;
 }
 
@@ -305,9 +312,18 @@ dd {
   padding-top: var(--v3-space-xl);
 }
 
-.v3-section-title h2,
-.v3-panel h2 {
+.v3-section-title h2 {
   color: var(--v3-ink);
+  font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.18;
+  letter-spacing: 0;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.5);
+}
+
+.v3-panel h2 {
+  color: var(--v3-card-ink);
   font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 28px;
   font-weight: 600;
@@ -343,7 +359,7 @@ dd {
 }
 
 .v3-card-head h3 {
-  color: var(--v3-ink);
+  color: var(--v3-card-ink);
   font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 22px;
   font-weight: 600;
@@ -355,13 +371,13 @@ dd {
 .v3-card-head p:not(.v3-eyebrow),
 .v3-panel-head p:not(.v3-eyebrow) {
   margin-top: 4px;
-  color: var(--v3-ink-subtle);
+  color: var(--v3-card-subtle);
   font-size: 13px;
 }
 
 .v3-progress-number {
   flex: 0 0 auto;
-  color: var(--v3-ink);
+  color: var(--v3-card-ink);
   font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 38px;
   font-weight: 600;
@@ -396,12 +412,12 @@ dd {
 }
 
 .v3-fact dt {
-  color: var(--v3-ink-subtle);
+  color: var(--v3-card-subtle);
   font-size: 12px;
 }
 
 .v3-fact dd {
-  color: var(--v3-ink-muted);
+  color: var(--v3-card-muted);
   font-size: 13px;
   font-weight: 600;
   text-align: right;
@@ -466,12 +482,12 @@ dd {
 
 .v3-timeline-row strong {
   overflow-wrap: anywhere;
-  color: var(--v3-ink);
+  color: var(--v3-card-ink);
   font-size: 14px;
 }
 
 .v3-timeline-row span {
-  color: var(--v3-ink-subtle);
+  color: var(--v3-card-subtle);
   font-size: 13px;
 }
 
@@ -496,7 +512,7 @@ dd {
   min-width: 0;
   overflow-wrap: anywhere;
   padding: var(--v3-space-md);
-  color: var(--v3-ink-muted);
+  color: var(--v3-card-muted);
 }
 
 .v3-table-row span + span {
@@ -508,14 +524,14 @@ dd {
 }
 
 .v3-table-head span {
-  color: var(--v3-ink-subtle);
+  color: var(--v3-card-subtle);
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .v3-muted {
-  color: var(--v3-ink-tertiary);
+  color: var(--v3-card-tertiary);
 }
 
 @media (max-width: 1080px) {
