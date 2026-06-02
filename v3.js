@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const app = document.querySelector("#v3-app");
 
-const VERSION = "V3.3";
+const VERSION = "V3.4";
 const ADMIN_EMAIL = "lyl549439629@gmail.com";
 const REPORT_STATE_ID = "current";
 const ASSET_BUCKET = "report-assets";
@@ -39,7 +39,7 @@ const state = {
   lightbox: null,
 };
 
-const progressKeys = ["hacking_progress", "plaster_progress", "clp_draw_pit"];
+const overviewKeys = ["hacking_progress", "clp_draw_pit"];
 const contentKeys = ["fountain_programme", "additional_works", "defect"];
 
 let lightboxDrag = null;
@@ -351,37 +351,12 @@ function renderMetaPills(report) {
   `;
 }
 
-function renderRailItem(section) {
-  const progress = metric(section, "Progress");
-  const secondary =
-    metric(section, "Remaining") ||
-    metric(section, "Target") ||
-    metric(section, "Forecast") ||
-    metric(section, "As of");
-
+function renderLastUpdatedCard(report) {
   return `
-    <a class="v3-rail-item" href="#${escapeAttr(section.section_key)}"${cardStyle(section)}>
-      <span>${escapeHtml(section.title)}</span>
-      <strong>${escapeHtml(progress || secondary)}</strong>
-      ${secondary && progress ? `<small>${escapeHtml(secondary)}</small>` : ""}
-    </a>
-  `;
-}
-
-function renderRail(report) {
-  const header = report.report_header;
-  const railSections = progressKeys.map((key) => sectionByKey(key)).filter(Boolean);
-
-  return `
-    <aside class="v3-rail" aria-label="Report index">
-      <div class="v3-rail-block">
-        <p class="v3-eyebrow">Last Updated</p>
-        <strong>${escapeHtml(header.date)}</strong>
-      </div>
-      <nav class="v3-rail-list" aria-label="Progress sections">
-        ${railSections.map(renderRailItem).join("")}
-      </nav>
-    </aside>
+    <div class="v3-hero-updated" aria-label="Last updated">
+      <p class="v3-eyebrow">Last Updated</p>
+      <strong>${escapeHtml(report.report_header.date)}</strong>
+    </div>
   `;
 }
 
@@ -456,13 +431,14 @@ function ganttStyle(item, bounds) {
   const start = dateOrdinal(item.start);
   const end = dateOrdinal(item.end || item.start);
   if (!Number.isFinite(start) || !Number.isFinite(end)) {
-    return "left: 0%; width: 100%;";
+    return "left: 0%; width: 50%;";
   }
 
   const span = bounds.max - bounds.min;
   const left = ((start - bounds.min) / span) * 100;
-  const width = Math.max(((end - start) / span) * 100, 14);
-  return `left: ${clamp(left, 0, 100)}%; width: ${clamp(width, 14, 100 - left)}%;`;
+  const rawWidth = Math.max(((end - start) / span) * 100, 14);
+  const width = clamp(rawWidth * 0.5, 14, 100 - left);
+  return `left: ${clamp(left, 0, 100)}%; width: ${width}%;`;
 }
 
 function ganttStatus(item) {
@@ -645,19 +621,19 @@ function renderAuthNotice() {
 function renderReport() {
   const report = state.report;
   const header = report.report_header;
-  const progressSections = progressKeys.map((key) => sectionByKey(key)).filter(Boolean);
+  const progressSections = overviewKeys.map((key) => sectionByKey(key)).filter(Boolean);
   const contentSections = contentKeys.map((key) => sectionByKey(key)).filter(Boolean);
 
   app.innerHTML = `
     ${renderTopbar()}
     ${renderAuthNotice()}
     <main class="v3-shell">
-      ${renderRail(report)}
       <section class="v3-content">
         <section class="v3-hero">
           <p class="v3-eyebrow">${escapeHtml(header.scope)}</p>
           <h1>${escapeHtml(header.title)}</h1>
           <p>${escapeHtml(header.subject)}</p>
+          ${renderLastUpdatedCard(report)}
           ${renderMetaPills(report)}
         </section>
 

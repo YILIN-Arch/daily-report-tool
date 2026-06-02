@@ -179,20 +179,10 @@ dd {
 }
 
 .v3-shell {
-  display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
-  gap: var(--v3-space-xl);
+  display: block;
   width: min(100%, 1220px);
   margin: 0 auto;
   padding: var(--v3-space-xxl) var(--v3-space-xl) 80px;
-}
-
-.v3-rail {
-  position: sticky;
-  top: 82px;
-  align-self: start;
-  display: grid;
-  gap: var(--v3-space-sm);
 }
 
 .v3-rail-block,
@@ -264,6 +254,8 @@ dd {
 }
 
 .v3-hero {
+  display: grid;
+  gap: var(--v3-space-md);
   border-bottom: 1px solid rgba(255, 255, 255, 0.16);
   padding: var(--v3-space-xl) 0 var(--v3-space-xxl);
 }
@@ -278,7 +270,7 @@ dd {
   text-shadow: 0 1px 14px rgba(0, 0, 0, 0.5);
 }
 
-.v3-rail .v3-eyebrow,
+.v3-hero-updated .v3-eyebrow,
 .v3-progress-card .v3-eyebrow,
 .v3-panel .v3-eyebrow {
   color: var(--v3-primary);
@@ -300,12 +292,29 @@ dd {
 
 .v3-hero > p:not(.v3-eyebrow) {
   max-width: 760px;
-  margin-bottom: var(--v3-space-lg);
   color: var(--v3-ink-muted);
   font-size: 20px;
   line-height: 1.45;
   text-wrap: pretty;
   text-shadow: 0 2px 18px rgba(0, 0, 0, 0.48);
+}
+
+.v3-hero-updated {
+  width: min(240px, 100%);
+  display: grid;
+  gap: 4px;
+  padding: var(--v3-space-md);
+  border: 1px solid var(--v3-hairline);
+  border-radius: var(--v3-radius);
+  background: rgba(248, 250, 252, 0.96);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
+}
+
+.v3-hero-updated strong {
+  color: var(--v3-card-ink);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.1;
 }
 
 .v3-meta {
@@ -356,7 +365,7 @@ dd {
 
 .v3-progress-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--v3-space-md);
 }
 
@@ -512,7 +521,7 @@ dd {
   top: 5px;
   bottom: 5px;
   display: grid;
-  min-width: 70px;
+  min-width: 56px;
   place-items: center;
   border-radius: 999px;
   padding: 0 10px;
@@ -1192,25 +1201,13 @@ dd {
 
 @media (max-width: 1080px) {
   .v3-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .v3-rail {
-    position: static;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .v3-rail-list {
-    grid-column: 1 / -1;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding-top: var(--v3-space-xl);
   }
 }
 
 @media (max-width: 820px) {
   .v3-progress-grid,
-  .v3-timeline,
-  .v3-rail,
-  .v3-rail-list {
+  .v3-timeline {
     grid-template-columns: 1fr;
   }
 
@@ -1240,7 +1237,6 @@ dd {
   }
 
   .v3-shell {
-    gap: var(--v3-space-lg);
     padding: var(--v3-space-lg) var(--v3-space-md) var(--v3-space-xl);
   }
 
