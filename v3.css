@@ -270,7 +270,6 @@ dd {
   text-shadow: 0 1px 14px rgba(0, 0, 0, 0.5);
 }
 
-.v3-hero-updated .v3-eyebrow,
 .v3-progress-card .v3-eyebrow,
 .v3-panel .v3-eyebrow {
   color: var(--v3-primary);
@@ -300,21 +299,23 @@ dd {
 }
 
 .v3-hero-updated {
-  width: min(240px, 100%);
-  display: grid;
-  gap: 4px;
-  padding: var(--v3-space-md);
+  width: fit-content;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 14px;
   border: 1px solid var(--v3-hairline);
   border-radius: var(--v3-radius);
   background: rgba(248, 250, 252, 0.96);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
+  white-space: nowrap;
 }
 
 .v3-hero-updated strong {
   color: var(--v3-card-ink);
-  font-size: 28px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 1.1;
+  line-height: 1;
 }
 
 .v3-meta {
@@ -478,7 +479,7 @@ dd {
 
 .v3-gantt-row {
   display: grid;
-  grid-template-columns: minmax(150px, 0.34fr) minmax(240px, 0.66fr);
+  grid-template-columns: minmax(150px, 1fr) auto;
   gap: var(--v3-space-md);
   align-items: center;
   border: 1px solid var(--v3-hairline);
@@ -509,8 +510,10 @@ dd {
 
 .v3-gantt-track {
   position: relative;
+  width: min(320px, 100%);
   min-height: 32px;
   overflow: hidden;
+  justify-self: end;
   border: 1px solid var(--v3-hairline);
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.08);
@@ -522,6 +525,8 @@ dd {
   bottom: 5px;
   display: grid;
   min-width: 56px;
+  right: 8px;
+  left: auto;
   place-items: center;
   border-radius: 999px;
   padding: 0 10px;
@@ -1242,6 +1247,14 @@ dd {
 
   .v3-hero {
     padding: var(--v3-space-lg) 0 var(--v3-space-xl);
+  }
+
+  .v3-hero-updated {
+    padding: 9px 12px;
+  }
+
+  .v3-hero-updated strong {
+    font-size: 13px;
   }
 
   .v3-hero h1 {

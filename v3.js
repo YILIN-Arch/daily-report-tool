@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const app = document.querySelector("#v3-app");
 
-const VERSION = "V3.4";
+const VERSION = "V3.5";
 const ADMIN_EMAIL = "lyl549439629@gmail.com";
 const REPORT_STATE_ID = "current";
 const ASSET_BUCKET = "report-assets";
@@ -351,11 +351,14 @@ function renderMetaPills(report) {
   `;
 }
 
+function formatUpdatedLabel(date) {
+  return `Last updated: ${date || ""}`;
+}
+
 function renderLastUpdatedCard(report) {
   return `
     <div class="v3-hero-updated" aria-label="Last updated">
-      <p class="v3-eyebrow">Last Updated</p>
-      <strong>${escapeHtml(report.report_header.date)}</strong>
+      <strong>${escapeHtml(formatUpdatedLabel(report.report_header.date))}</strong>
     </div>
   `;
 }
@@ -428,17 +431,9 @@ function ganttBounds(tasks) {
 }
 
 function ganttStyle(item, bounds) {
-  const start = dateOrdinal(item.start);
-  const end = dateOrdinal(item.end || item.start);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) {
-    return "left: 0%; width: 50%;";
-  }
-
-  const span = bounds.max - bounds.min;
-  const left = ((start - bounds.min) / span) * 100;
-  const rawWidth = Math.max(((end - start) / span) * 100, 14);
-  const width = clamp(rawWidth * 0.5, 14, 100 - left);
-  return `left: ${clamp(left, 0, 100)}%; width: ${width}%;`;
+  const status = ganttStatus(item);
+  const compact = item.completed ? 78 : status === "TBC" ? 72 : 74;
+  return `width: ${compact}%;`;
 }
 
 function ganttStatus(item) {
