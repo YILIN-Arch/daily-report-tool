@@ -3,9 +3,11 @@ import { defineConfig } from "vite";
 
 const isDailyReportBuild = process.env.BUILD_TARGET === "daily-report";
 const isGitHubPagesBuild = process.env.GITHUB_PAGES === "true";
+const pagesRepo = process.env.PAGES_REPO || "daily-report-tool";
+const pagesBase = `/${pagesRepo}/`;
 
 export default defineConfig({
-  base: isGitHubPagesBuild ? "/SSC.Progess/" : "/",
+  base: isGitHubPagesBuild ? pagesBase : "/",
   publicDir: isDailyReportBuild ? false : "public",
   build: {
     rollupOptions: {

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 3000",
     "build": "vite build",
-    "build:daily-report": "BUILD_TARGET=daily-report GITHUB_PAGES=true vite build && node -e \"const fs=require('fs');fs.copyFileSync('dist/daily-report.html','dist/index.html')\"",
+    "build:daily-report": "BUILD_TARGET=daily-report GITHUB_PAGES=true PAGES_REPO=daily-report-tool vite build && node -e \"const fs=require('fs');fs.copyFileSync('dist/daily-report.html','dist/index.html')\"",
     "preview": "vite preview --host 127.0.0.1 --port 3000",
     "generate": "node scripts/generate-site-data.mjs"
   },
