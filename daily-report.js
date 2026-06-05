@@ -9,9 +9,11 @@ import {
   getMonthDays,
   getMonthKey,
   getPreviewModel,
+  getReportForDate,
   getWeatherForDate,
   getSheetNameForDate,
   parseRawTextToDraft,
+  setReportForDate,
   setWeatherForDate,
   sortDates,
   validateDraft,
@@ -28,7 +30,6 @@ const AUTOPARSE_DELAY_MS = 500;
 
 const state = {
   draft: createEmptyDraft(),
-  rawText: "",
   calendarMonth: getMonthKey(createEmptyDraft().selectedDates[0]),
   previewDate: createEmptyDraft().selectedDates[0],
   message: "",
@@ -63,7 +64,7 @@ function formatMonthTitle(monthKey) {
 }
 
 function sumParsedPeople() {
-  return (state.draft.parsedEntries || []).reduce((sum, entry) => sum + Number(entry.count || 0), 0);
+  return (getActiveReport().parsedEntries || []).reduce((sum, entry) => sum + Number(entry.count || 0), 0);
 }
 
 function getActivePreviewDate() {
@@ -80,6 +81,19 @@ function getWeatherFilledCount(dates) {
   }).length;
 }
 
+function getActiveReport() {
+  return getReportForDate(state.draft, getActivePreviewDate());
+}
+
+function setActiveRawText(rawText) {
+  const date = getActivePreviewDate();
+  const report = getReportForDate(state.draft, date);
+  setReportForDate(state.draft, date, {
+    ...report,
+    rawText,
+  });
+}
+
 function scheduleParse() {
   window.clearTimeout(autoparseTimer);
   autoparseTimer = window.setTimeout(() => {
@@ -88,7 +102,9 @@ function scheduleParse() {
 }
 
 function runRawParse(message = "整理完成") {
-  const result = parseRawTextToDraft(state.rawText, state.draft, {
+  const activeDate = getActivePreviewDate();
+  const result = parseRawTextToDraft(getActiveReport().rawText, state.draft, {
+    reportDate: activeDate,
     weatherDate: getActivePreviewDate(),
   });
   state.draft = result.draft;
@@ -98,8 +114,11 @@ function runRawParse(message = "整理完成") {
 }
 
 function clearInput() {
-  state.rawText = "";
-  const result = parseRawTextToDraft("", state.draft);
+  const activeDate = getActivePreviewDate();
+  const result = parseRawTextToDraft("", state.draft, {
+    reportDate: activeDate,
+    weatherDate: activeDate,
+  });
   state.draft = result.draft;
   state.message = "已清空輸入。";
   state.error = "";
@@ -121,6 +140,7 @@ function renderHeader() {
 }
 
 function renderInputPane() {
+  const activeReport = getActiveReport();
   return `
     <section class="dr-pane dr-input-pane">
       <div class="dr-pane-toolbar">
@@ -139,7 +159,7 @@ function renderInputPane() {
 
 海聯
 33/F H單位封廁所天花2人；33/F A單位廚房天花2人"
-      >${escapeHtml(state.rawText)}</textarea>
+      >${escapeHtml(activeReport.rawText)}</textarea>
     </section>
   `;
 }
@@ -220,9 +240,10 @@ function renderCheckPane() {
   const activeDate = getActivePreviewDate();
   const activeWeather = getWeatherForDate(state.draft, activeDate);
   const weatherFilledCount = getWeatherFilledCount(selectedDates);
-  const activeEntries = state.draft.parsedEntries.length;
-  const ignoredCount = state.draft.ignoredLines.length;
-  const ambiguousCount = state.draft.ambiguousBlocks.length;
+  const activeReport = getActiveReport();
+  const activeEntries = activeReport.parsedEntries.length;
+  const ignoredCount = activeReport.ignoredLines.length;
+  const ambiguousCount = activeReport.ambiguousBlocks.length;
   const allWeatherFilled = selectedDates.length > 0 && weatherFilledCount === selectedDates.length;
 
   return `
@@ -258,17 +279,17 @@ function renderCheckPane() {
         </div>
       </div>
       ${detailErrors.length ? `<div class="dr-issue-block">${detailErrors.map((item) => `<p>${escapeHtml(item)}</p>`).join("")}</div>` : ""}
-      ${state.draft.ambiguousBlocks.length ? renderAmbiguousBlocks() : ""}
+      ${activeReport.ambiguousBlocks.length ? renderAmbiguousBlocks(activeReport) : ""}
       ${state.error ? `<div class="dr-status dr-status-error">${escapeHtml(state.error)}</div>` : ""}
       ${state.message ? `<div class="dr-status dr-status-success">${escapeHtml(state.message)}</div>` : ""}
     </section>
   `;
 }
 
-function renderAmbiguousBlocks() {
+function renderAmbiguousBlocks(report) {
   return `
     <div class="dr-ambiguous-list">
-      ${state.draft.ambiguousBlocks
+      ${report.ambiguousBlocks
         .map(
           (block) => `
             <p><strong>${escapeHtml(block.title)}</strong><span>${escapeHtml(block.reason)}</span></p>
@@ -522,7 +543,7 @@ app.addEventListener("input", (event) => {
   const target = event.target;
   if (!(target instanceof HTMLTextAreaElement)) return;
   if (target.dataset.kind !== "raw-text") return;
-  state.rawText = target.value;
+  setActiveRawText(target.value);
   scheduleParse();
 });
 

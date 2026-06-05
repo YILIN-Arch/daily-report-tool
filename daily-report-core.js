@@ -64,6 +64,58 @@ function createEntryDraft(entry) {
   };
 }
 
+function createEmptyReport() {
+  return {
+    rawText: "",
+    entries: ENTRY_CONFIG.map((entry) => createEntryDraft(entry)),
+    parsedEntries: [],
+    ignoredLines: [],
+    ambiguousBlocks: [],
+  };
+}
+
+function cloneReport(report = {}) {
+  return {
+    rawText: coerceValueToString(report.rawText),
+    entries: ENTRY_CONFIG.map((config) => {
+      const existing = (report.entries || []).find((entry) => entry.key === config.key) || {};
+      return {
+        ...createEntryDraft(config),
+        ...existing,
+        count: coerceValueToString(existing.count),
+        summary: coerceValueToString(existing.summary),
+      };
+    }),
+    parsedEntries: (report.parsedEntries || []).map((entry) => ({
+      ...entry,
+      sources: [...(entry.sources || [])],
+    })),
+    ignoredLines: [...(report.ignoredLines || [])],
+    ambiguousBlocks: (report.ambiguousBlocks || []).map((block) => ({ ...block })),
+  };
+}
+
+function reportFromDraft(draft, rawText = "") {
+  return cloneReport({
+    rawText,
+    entries: draft.entries,
+    parsedEntries: draft.parsedEntries,
+    ignoredLines: draft.ignoredLines,
+    ambiguousBlocks: draft.ambiguousBlocks,
+  });
+}
+
+function applyReportToDraft(draft, report) {
+  const nextReport = cloneReport(report);
+  return {
+    ...draft,
+    entries: nextReport.entries,
+    parsedEntries: nextReport.parsedEntries,
+    ignoredLines: nextReport.ignoredLines,
+    ambiguousBlocks: nextReport.ambiguousBlocks,
+  };
+}
+
 function parseIntegerString(value) {
   if (value === "" || value === null || value === undefined) {
     return { ok: true, number: null };
@@ -148,15 +200,64 @@ function computeSummarySegments(summary, limits) {
     }
 
     if (!placed) {
-      return {
-        ok: false,
-        error: `「${summary}」超出可寫空間，請拆短後再導出。`,
-        segments: [],
-      };
+      const compressed = compressSummaryToLimit(text, limits[limits.length - 1]);
+      if (compressed) {
+        segments[limits.length - 1] = compressed;
+        return { ok: true, segments };
+      }
+
+      segments[limits.length - 1] = text.slice(0, limits[limits.length - 1]);
+      return { ok: true, segments };
     }
   }
 
   return { ok: true, segments };
+}
+
+function compactWorkItem(item) {
+  return sanitizeText(item)
+    .replace(/\s+/g, "")
+    .replace(/([A-Za-z0-9])\/F/gi, "$1/F")
+    .replace(/(\d+)\s*人/g, "$1")
+    .replace(/單位/g, "")
+    .replace(/安裝/g, "裝")
+    .replace(/廁所/g, "廁")
+    .replace(/走廊/g, "廊")
+    .replace(/牆身/g, "牆")
+    .replace(/地台/g, "地")
+    .replace(/天花/g, "天")
+    .replace(/骨架/g, "骨")
+    .replace(/批灰/g, "批")
+    .replace(/打鑿/g, "鑿");
+}
+
+function compressSummaryToLimit(summary, limit) {
+  const items = splitWorkItems([summary]).map(compactWorkItem).filter(Boolean);
+  if (!items.length || limit <= 0) return "";
+
+  const totalPeople = countPeopleInText(summary);
+  const suffix = totalPeople ? `; 等${totalPeople}人` : "; 等";
+  const reserve = suffix.length;
+  const picked = [];
+  let current = "";
+
+  for (const item of items) {
+    const next = current ? `${current}; ${item}` : item;
+    if (next.length + reserve <= limit) {
+      picked.push(item);
+      current = next;
+      continue;
+    }
+    break;
+  }
+
+  if (!picked.length) {
+    const clipped = items[0].slice(0, Math.max(0, limit - reserve));
+    return `${clipped}${suffix}`.slice(0, limit);
+  }
+
+  const needsSuffix = picked.length < items.length;
+  return `${picked.join("; ")}${needsSuffix ? suffix : ""}`.slice(0, limit);
 }
 
 function coerceValueToString(value) {
@@ -502,6 +603,9 @@ export function createEmptyDraft(defaultDate = todayLocalIso()) {
     parsedEntries: [],
     ignoredLines: [],
     ambiguousBlocks: [],
+    reportsByDate: {
+      [defaultDate]: createEmptyReport(),
+    },
   };
 }
 
@@ -525,7 +629,36 @@ export function cloneDraft(draft) {
     })),
     ignoredLines: [...(draft.ignoredLines || [])],
     ambiguousBlocks: (draft.ambiguousBlocks || []).map((block) => ({ ...block })),
+    reportsByDate: Object.fromEntries(
+      Object.entries(draft.reportsByDate || {}).map(([date, report]) => [
+        date,
+        cloneReport(report),
+      ]),
+    ),
   };
+}
+
+export function getReportForDate(draft, date) {
+  const canonical = canonicalizeDate(date) || resolveWeatherEditDate(draft);
+  if (!canonical) return createEmptyReport();
+
+  const reportsByDate = draft.reportsByDate || {};
+  if (Object.prototype.hasOwnProperty.call(reportsByDate, canonical)) {
+    return cloneReport(reportsByDate[canonical]);
+  }
+
+  return createEmptyReport();
+}
+
+export function setReportForDate(draft, date, report) {
+  const canonical = canonicalizeDate(date) || resolveWeatherEditDate(draft);
+  if (!canonical) return;
+  if (!draft.reportsByDate) draft.reportsByDate = {};
+  draft.reportsByDate[canonical] = cloneReport(report);
+}
+
+function getDraftForDate(draft, date) {
+  return applyReportToDraft(cloneDraft(draft), getReportForDate(draft, date));
 }
 
 export function buildExportFilename(draft) {
@@ -558,7 +691,13 @@ export function setWeatherForDate(draft, date, period, value) {
 }
 
 export function parseRawTextToDraft(rawText, baseDraft, options = {}) {
-  const draft = parseRawTextBlocks(rawText, baseDraft, options);
+  const reportDate = canonicalizeDate(options.reportDate) || resolveWeatherEditDate(baseDraft, options.weatherDate);
+  const scopedBaseDraft = reportDate ? getDraftForDate(baseDraft, reportDate) : baseDraft;
+  const draft = parseRawTextBlocks(rawText, scopedBaseDraft, options);
+  if (reportDate) {
+    setReportForDate(draft, reportDate, reportFromDraft(draft, rawText));
+  }
+
   return {
     draft,
     parsedEntries: draft.parsedEntries,
@@ -591,6 +730,12 @@ export function serializeDraftForJson(draft) {
       })),
     ignoredLines: [...(draft.ignoredLines || [])],
     ambiguousBlocks: [...(draft.ambiguousBlocks || [])],
+    reportsByDate: Object.fromEntries(
+      Object.entries(draft.reportsByDate || {}).map(([date, report]) => [
+        date,
+        cloneReport(report),
+      ]),
+    ),
   };
 }
 
@@ -598,6 +743,7 @@ export function validateDraft(draft) {
   const errors = [];
   const warnings = [];
   const summarySegmentsByKey = {};
+  const summarySegmentsByDate = {};
   const dates = sortDates(draft.selectedDates || []);
   const monthKeys = new Set(dates.map(getMonthKey));
 
@@ -617,17 +763,20 @@ export function validateDraft(draft) {
   }
 
   let hasAnyEntry = false;
-  for (const entry of draft.entries) {
-    const count = parseIntegerString(entry.count);
-    if (!count.ok) errors.push(`${entry.label} / ${entry.contractor} 的人數只能填非負整數。`);
-    if (sanitizeText(entry.count) || sanitizeText(entry.summary)) hasAnyEntry = true;
+  const entryDates = dates.length ? dates : [""];
+  for (const date of entryDates) {
+    const scopedDraft = date ? getDraftForDate(draft, date) : draft;
+    summarySegmentsByDate[date] = {};
 
-    const config = ENTRY_BY_KEY.get(entry.key);
-    const summaryResult = computeSummarySegments(entry.summary, config.summaryLimits);
-    if (!summaryResult.ok) {
-      errors.push(`${entry.label} / ${entry.contractor}：${summaryResult.error}`);
-    } else {
-      summarySegmentsByKey[entry.key] = summaryResult.segments;
+    for (const entry of scopedDraft.entries) {
+      const count = parseIntegerString(entry.count);
+      if (!count.ok) errors.push(`${entry.label} / ${entry.contractor} 的人數只能填非負整數。`);
+      if (sanitizeText(entry.count) || sanitizeText(entry.summary)) hasAnyEntry = true;
+
+      const config = ENTRY_BY_KEY.get(entry.key);
+      const summaryResult = computeSummarySegments(entry.summary, config.summaryLimits);
+      summarySegmentsByDate[date][entry.key] = summaryResult.segments;
+      if (!summarySegmentsByKey[entry.key]) summarySegmentsByKey[entry.key] = summaryResult.segments;
     }
   }
 
@@ -639,6 +788,7 @@ export function validateDraft(draft) {
     errors,
     warnings,
     summarySegmentsByKey,
+    summarySegmentsByDate,
     dates,
     monthKey: dates[0] ? getMonthKey(dates[0]) : "",
   };
@@ -660,6 +810,7 @@ export function getEntryGroupsWithDraft(draft, onlyFilled = false) {
 export function getPreviewModel(draft, previewDate = "") {
   const dates = sortDates(draft.selectedDates || []);
   const date = canonicalizeDate(previewDate) || dates[0] || todayLocalIso();
+  const scopedDraft = getDraftForDate(draft, date);
   return {
     date,
     sheetName: getSheetNameForDate(date),
@@ -669,7 +820,7 @@ export function getPreviewModel(draft, previewDate = "") {
       ...field,
       value: draft.headcount[field.key] || "0",
     })),
-    entries: draft.entries.filter((entry) => sanitizeText(entry.count) || sanitizeText(entry.summary)),
+    entries: scopedDraft.entries.filter((entry) => sanitizeText(entry.count) || sanitizeText(entry.summary)),
   };
 }
 
@@ -699,6 +850,7 @@ export function applyDraftToWorksheet(worksheet, draft, validation = null, targe
   if (!nextValidation.isValid) throw new Error(nextValidation.errors.join("\n"));
 
   const date = canonicalizeDate(targetDate) || nextValidation.dates[0];
+  const scopedDraft = getDraftForDate(draft, date);
   const [year, month, day] = date.split("-").map(Number);
   resetWorksheetEditableCells(worksheet);
 
@@ -718,12 +870,15 @@ export function applyDraftToWorksheet(worksheet, draft, validation = null, targe
     worksheet.getCell(field.cell).value = sanitizeText(draft.signatories[field.key]);
   }
 
-  for (const entry of draft.entries) {
+  for (const entry of scopedDraft.entries) {
     const config = ENTRY_BY_KEY.get(entry.key);
     const count = parseIntegerString(entry.count).number;
     worksheet.getCell(config.countCell).value = count ?? null;
 
-    const segments = nextValidation.summarySegmentsByKey[entry.key] || config.summaryCells.map(() => "");
+    const segments =
+      nextValidation.summarySegmentsByDate?.[date]?.[entry.key] ||
+      nextValidation.summarySegmentsByKey[entry.key] ||
+      config.summaryCells.map(() => "");
     config.summaryCells.forEach((cell, index) => {
       const targetCell = worksheet.getCell(cell);
       targetCell.value = segments[index] || null;
