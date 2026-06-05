@@ -176,88 +176,9 @@ function computeSummarySegments(summary, limits) {
   const text = sanitizeText(summary).replace(/\r\n/g, "\n");
   if (!text) return { ok: true, segments: limits.map(() => "") };
 
-  const items = text
-    .split(/\n|;/)
-    .map((item) => sanitizeText(item))
-    .filter(Boolean);
-  const units = items.length ? items : [text];
   const segments = limits.map(() => "");
-  let slotIndex = 0;
-
-  for (const unit of units) {
-    let placed = false;
-    while (slotIndex < limits.length && !placed) {
-      const nextValue = segments[slotIndex]
-        ? `${segments[slotIndex]}; ${unit}`
-        : unit;
-
-      if (nextValue.length <= limits[slotIndex]) {
-        segments[slotIndex] = nextValue;
-        placed = true;
-      } else {
-        slotIndex += 1;
-      }
-    }
-
-    if (!placed) {
-      const compressed = compressSummaryToLimit(text, limits[limits.length - 1]);
-      if (compressed) {
-        segments[limits.length - 1] = compressed;
-        return { ok: true, segments };
-      }
-
-      segments[limits.length - 1] = text.slice(0, limits[limits.length - 1]);
-      return { ok: true, segments };
-    }
-  }
-
+  segments[0] = text;
   return { ok: true, segments };
-}
-
-function compactWorkItem(item) {
-  return sanitizeText(item)
-    .replace(/\s+/g, "")
-    .replace(/([A-Za-z0-9])\/F/gi, "$1/F")
-    .replace(/(\d+)\s*人/g, "$1")
-    .replace(/單位/g, "")
-    .replace(/安裝/g, "裝")
-    .replace(/廁所/g, "廁")
-    .replace(/走廊/g, "廊")
-    .replace(/牆身/g, "牆")
-    .replace(/地台/g, "地")
-    .replace(/天花/g, "天")
-    .replace(/骨架/g, "骨")
-    .replace(/批灰/g, "批")
-    .replace(/打鑿/g, "鑿");
-}
-
-function compressSummaryToLimit(summary, limit) {
-  const items = splitWorkItems([summary]).map(compactWorkItem).filter(Boolean);
-  if (!items.length || limit <= 0) return "";
-
-  const totalPeople = countPeopleInText(summary);
-  const suffix = totalPeople ? `; 等${totalPeople}人` : "; 等";
-  const reserve = suffix.length;
-  const picked = [];
-  let current = "";
-
-  for (const item of items) {
-    const next = current ? `${current}; ${item}` : item;
-    if (next.length + reserve <= limit) {
-      picked.push(item);
-      current = next;
-      continue;
-    }
-    break;
-  }
-
-  if (!picked.length) {
-    const clipped = items[0].slice(0, Math.max(0, limit - reserve));
-    return `${clipped}${suffix}`.slice(0, limit);
-  }
-
-  const needsSuffix = picked.length < items.length;
-  return `${picked.join("; ")}${needsSuffix ? suffix : ""}`.slice(0, limit);
 }
 
 function coerceValueToString(value) {
@@ -276,6 +197,17 @@ function splitWorkItems(lines) {
     .split(/\n|；|;/)
     .map((item) => sanitizeText(item))
     .filter(Boolean);
+}
+
+function estimateSummaryRowHeight(summary) {
+  const text = sanitizeText(summary);
+  if (!text) return null;
+
+  const explicitLines = text.split(/\n/).length;
+  const workItemLines = splitWorkItems([text]).length;
+  const wrappedLines = Math.ceil(text.length / 54);
+  const lineCount = Math.max(explicitLines, workItemLines, wrappedLines, 1);
+  return Math.max(17.25, lineCount * 15);
 }
 
 function countPeopleInText(text) {
@@ -890,5 +822,11 @@ export function applyDraftToWorksheet(worksheet, draft, validation = null, targe
         shrinkToFit: false,
       };
     });
+
+    const rowHeight = estimateSummaryRowHeight(entry.summary);
+    if (rowHeight) {
+      const row = worksheet.getRow(entry.row);
+      row.height = Math.max(Number(row.height || 17.25), rowHeight);
+    }
   }
 }
