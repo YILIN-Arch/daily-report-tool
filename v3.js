@@ -2,7 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const app = document.querySelector("#v3-app");
 
-const VERSION = "V3.5";
+const VERSION = "V3.6";
 const ADMIN_EMAIL = "lyl549439629@gmail.com";
 const REPORT_STATE_ID = "current";
 const ASSET_BUCKET = "report-assets";
@@ -23,7 +23,9 @@ const defaultTheme = {
 const state = {
   baseReport: null,
   report: null,
+  currentReport: null,
   theme: structuredClone(defaultTheme),
+  currentTheme: structuredClone(defaultTheme),
   loading: true,
   error: "",
   isAdminMode: new URLSearchParams(window.location.search).get("admin") === "1",
@@ -36,6 +38,9 @@ const state = {
   uploading: "",
   activeDetailKey: "",
   expandedTableRows: {},
+  historyItems: [],
+  historyOpen: false,
+  selectedHistoryKey: "current",
   lightbox: null,
 };
 
@@ -70,6 +75,20 @@ function isEmptyObject(value) {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function normalizeReportDateKey(value) {
+  const text = String(value || "").trim();
+  const iso = text.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
+
+  const slash = text.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})/);
+  if (slash) {
+    const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3];
+    return `${year}-${slash[2].padStart(2, "0")}-${slash[1].padStart(2, "0")}`;
+  }
+
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
 function makeId(prefix) {
@@ -263,10 +282,13 @@ async function init() {
     if (!response.ok) throw new Error(`Unable to load report (${response.status}).`);
     state.baseReport = normalizeReport(await response.json());
     state.report = clone(state.baseReport);
+    state.currentReport = clone(state.baseReport);
+    state.currentTheme = mergeTheme(defaultTheme);
 
     if (supabase) {
       await initSupabase();
       await loadPublishedState();
+      await loadHistoryItems();
     }
   } catch (error) {
     state.error = error.message;
@@ -318,6 +340,82 @@ async function loadPublishedState() {
   }
 
   state.theme = mergeTheme(data?.theme);
+  state.currentReport = clone(state.report);
+  state.currentTheme = clone(state.theme);
+  state.selectedHistoryKey = "current";
+}
+
+async function loadHistoryItems() {
+  if (!supabase) return;
+
+  const { data, error } = await supabase
+    .from("report_page_history")
+    .select("date_key, report_date, updated_at")
+    .order("date_key", { ascending: false });
+
+  if (error) {
+    state.historyItems = [];
+    return;
+  }
+
+  state.historyItems = Array.isArray(data) ? data : [];
+}
+
+function currentHistoryItem() {
+  const date = state.currentReport?.report_header?.date || state.report?.report_header?.date || "";
+  return {
+    date_key: "current",
+    report_date: date,
+    updated_at: "",
+  };
+}
+
+function historyMenuItems() {
+  const current = currentHistoryItem();
+  const currentDateKey = normalizeReportDateKey(current.report_date);
+  const history = state.historyItems.filter((item) => item.date_key !== currentDateKey);
+  return [current, ...history];
+}
+
+function applyCurrentSnapshot() {
+  state.report = clone(state.currentReport || state.baseReport);
+  state.theme = mergeTheme(state.currentTheme);
+  state.selectedHistoryKey = "current";
+  state.historyOpen = false;
+  state.activeDetailKey = "";
+  state.expandedTableRows = {};
+  applyTheme();
+  render();
+}
+
+async function selectHistory(dateKey) {
+  if (dateKey === "current") {
+    applyCurrentSnapshot();
+    return;
+  }
+
+  if (!supabase) return;
+  const { data, error } = await supabase
+    .from("report_page_history")
+    .select("report, theme")
+    .eq("date_key", dateKey)
+    .maybeSingle();
+
+  if (error || !data) {
+    state.authMessage = error?.message || "History unavailable.";
+    state.historyOpen = false;
+    render();
+    return;
+  }
+
+  state.report = normalizeReport(data.report);
+  state.theme = mergeTheme(data.theme);
+  state.selectedHistoryKey = dateKey;
+  state.historyOpen = false;
+  state.activeDetailKey = "";
+  state.expandedTableRows = {};
+  applyTheme();
+  render();
 }
 
 function renderLoading() {
@@ -356,9 +454,38 @@ function formatUpdatedLabel(date) {
 }
 
 function renderLastUpdatedCard(report) {
+  const label = formatUpdatedLabel(report.report_header.date);
+  if (!supabase) {
+    return `
+      <div class="v3-hero-updated" aria-label="Last updated">
+        <strong>${escapeHtml(label)}</strong>
+      </div>
+    `;
+  }
+
+  const items = historyMenuItems();
   return `
-    <div class="v3-hero-updated" aria-label="Last updated">
-      <strong>${escapeHtml(formatUpdatedLabel(report.report_header.date))}</strong>
+    <div class="v3-history">
+      <button class="v3-hero-updated" type="button" data-action="toggle-history" aria-expanded="${state.historyOpen ? "true" : "false"}" aria-label="Choose report history date">
+        <strong>${escapeHtml(label)}</strong>
+        <span aria-hidden="true">⌄</span>
+      </button>
+      ${
+        state.historyOpen
+          ? `<div class="v3-history-menu" role="menu">
+              ${items
+                .map(
+                  (item) => `
+                    <button type="button" data-action="select-history" data-history-key="${escapeAttr(item.date_key)}" role="menuitem">
+                      <span>${escapeHtml(item.date_key === "current" ? `${item.report_date} · Latest` : item.report_date)}</span>
+                      ${state.selectedHistoryKey === item.date_key ? "<strong>Viewing</strong>" : ""}
+                    </button>
+                  `,
+                )
+                .join("")}
+            </div>`
+          : ""
+      }
     </div>
   `;
 }
@@ -1004,6 +1131,14 @@ async function logout() {
 }
 
 function openEditor() {
+  if (state.selectedHistoryKey !== "current") {
+    state.report = clone(state.currentReport || state.report);
+    state.theme = mergeTheme(state.currentTheme);
+    state.selectedHistoryKey = "current";
+    state.historyOpen = false;
+    applyTheme();
+  }
+
   state.draft = {
     report: normalizeReport(state.report),
     theme: clone(state.theme),
@@ -1028,12 +1163,13 @@ async function saveEditor() {
 
   const report = normalizeReport(state.draft.report);
   const { data: userData } = await supabase.auth.getUser();
+  const updatedAt = new Date().toISOString();
   const { error } = await supabase.from("report_page_state").upsert({
     id: REPORT_STATE_ID,
     report,
     theme: state.draft.theme,
     updated_by: userData.user?.id,
-    updated_at: new Date().toISOString(),
+    updated_at: updatedAt,
   });
 
   if (error) {
@@ -1043,8 +1179,28 @@ async function saveEditor() {
     return;
   }
 
+  const dateKey = normalizeReportDateKey(report.report_header?.date);
+  if (dateKey) {
+    const { error: historyError } = await supabase.from("report_page_history").upsert({
+      date_key: dateKey,
+      report_date: report.report_header?.date || dateKey,
+      report,
+      theme: state.draft.theme,
+      updated_by: userData.user?.id,
+      updated_at: updatedAt,
+    });
+
+    if (historyError) {
+      state.authMessage = `Published current. History unavailable: ${historyError.message}`;
+    }
+  }
+
   state.report = clone(report);
   state.theme = mergeTheme(state.draft.theme);
+  state.currentReport = clone(state.report);
+  state.currentTheme = clone(state.theme);
+  state.selectedHistoryKey = "current";
+  await loadHistoryItems();
   state.editorOpen = false;
   state.draft = null;
   state.saving = false;
@@ -1303,6 +1459,20 @@ app.addEventListener("click", (event) => {
   const actionElement = event.target.closest("[data-action]");
   const action = actionElement?.dataset.action;
 
+  if (state.historyOpen && !event.target.closest(".v3-history")) {
+    state.historyOpen = false;
+    render();
+    return;
+  }
+  if (action === "toggle-history") {
+    state.historyOpen = !state.historyOpen;
+    render();
+    return;
+  }
+  if (action === "select-history") {
+    selectHistory(actionElement.dataset.historyKey);
+    return;
+  }
   if (action === "open-editor") {
     openEditor();
     return;
@@ -1384,6 +1554,11 @@ app.addEventListener("click", (event) => {
 });
 
 app.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && state.historyOpen) {
+    state.historyOpen = false;
+    render();
+    return;
+  }
   if (event.key === "Escape" && state.lightbox) {
     closeLightbox();
     return;
