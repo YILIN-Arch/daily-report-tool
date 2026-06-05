@@ -27,7 +27,7 @@ const DYNAMIC_CLASSIFICATION_RULES = [
   { label: "釘板", keywords: ["釘板", "出柱頭", "釘模", "板模", "木模"] },
   { label: "油漆", keywords: ["油漆", "省油", "批灰", "製位批灰", "滑面", "批滑面"] },
   { label: "鋁窗", keywords: ["鋁窗", "冷氣機窗", "窗仔", "唧膠"] },
-  { label: "門框", keywords: ["門框", "裝門", "單位門", "執釘窿"] },
+  { label: "門框", keywords: ["門框"] },
   { label: "廚櫃", keywords: ["廚櫃", "櫥櫃", "廚房櫃"] },
   { label: "水櫃", keywords: ["水櫃"] },
   { label: "鐵器", keywords: ["鐵器", "扶手", "欄杆", "鐵閘"] },
@@ -46,6 +46,14 @@ const DYNAMIC_CLASSIFICATION_RULES = [
   { label: "預制間牆板", keywords: ["預制間牆板", "間牆板"] },
   { label: "墨斗", keywords: ["墨斗", "彈線"] },
   { label: "什項", keywords: ["清垃圾", "打鑿", "打炮", "保護", "基仔"] },
+];
+
+const CUSTOM_LINE_HEAD_RULES = [
+  {
+    label: "木門",
+    anchorLabel: "門框",
+    aliases: ["木門", "木门", "木製門", "木制門", "木製门", "木制门"],
+  },
 ];
 
 const HEADCOUNT_KEY_ALIASES = {
@@ -276,7 +284,100 @@ function countPeopleInText(text) {
   );
 }
 
+function normalizeDisplayLineHead(value) {
+  const text = sanitizeText(value);
+  const customRule = CUSTOM_LINE_HEAD_RULES.find((rule) =>
+    rule.aliases.some((alias) => normalizeComparableText(alias) === normalizeComparableText(text)),
+  );
+  return customRule?.label || text;
+}
+
+function getAnchorForLineHead(label, preferredAnchorLabel = "") {
+  const normalizedLabel = normalizeComparableText(label);
+  const exactEntry = ENTRY_CONFIG.find((entry) => normalizeComparableText(entry.label) === normalizedLabel);
+  if (exactEntry) return exactEntry;
+
+  const customRule = CUSTOM_LINE_HEAD_RULES.find(
+    (rule) => normalizeComparableText(rule.label) === normalizedLabel,
+  );
+  if (customRule) {
+    return ENTRY_ANCHOR_BY_LABEL.get(customRule.anchorLabel) || ENTRY_ANCHOR_BY_LABEL.get("什項");
+  }
+
+  if (preferredAnchorLabel) {
+    return ENTRY_ANCHOR_BY_LABEL.get(preferredAnchorLabel) || ENTRY_ANCHOR_BY_LABEL.get("什項");
+  }
+
+  return ENTRY_ANCHOR_BY_LABEL.get("什項") || ENTRY_CONFIG[0];
+}
+
+function findExplicitLineHead(title) {
+  const text = sanitizeText(title);
+  if (!text) return null;
+  const normalizedTitle = normalizeComparableText(text);
+
+  const customCandidates = CUSTOM_LINE_HEAD_RULES.flatMap((rule) =>
+    rule.aliases.map((alias) => ({
+      label: rule.label,
+      alias,
+      anchor: getAnchorForLineHead(rule.label),
+    })),
+  );
+  const templateCandidates = [...new Set(ENTRY_CONFIG.map((entry) => entry.label))].map((label) => ({
+    label,
+    alias: label,
+    anchor: getAnchorForLineHead(label),
+  }));
+
+  const candidates = [...customCandidates, ...templateCandidates]
+    .filter((candidate) => normalizedTitle.includes(normalizeComparableText(candidate.alias)))
+    .sort((left, right) => normalizeComparableText(right.alias).length - normalizeComparableText(left.alias).length);
+
+  for (const candidate of candidates) {
+    const contractor = sanitizeText(text.replace(new RegExp(candidate.alias, "gi"), ""));
+    if (contractor) {
+      return {
+        label: candidate.label,
+        contractor,
+        anchor: candidate.anchor,
+        matchedKeywords: [candidate.alias],
+        needsReview: false,
+      };
+    }
+  }
+
+  const separated = text.match(/^(.+?)[\s　/／｜|:：-]+([^\s　/／｜|:：-]{1,8})$/);
+  if (separated) {
+    const contractor = sanitizeText(separated[1]);
+    const label = normalizeDisplayLineHead(separated[2]);
+    if (contractor && label) {
+      return {
+        label,
+        contractor,
+        anchor: getAnchorForLineHead(label),
+        matchedKeywords: [label],
+        needsReview: false,
+      };
+    }
+  }
+
+  return null;
+}
+
 function classifyDynamicEntry(title, contentItems) {
+  const explicitLineHead = findExplicitLineHead(title);
+  if (explicitLineHead) {
+    return {
+      ok: true,
+      label: explicitLineHead.label,
+      contractor: explicitLineHead.contractor,
+      anchor: explicitLineHead.anchor,
+      score: 99,
+      matchedKeywords: explicitLineHead.matchedKeywords,
+      needsReview: explicitLineHead.needsReview,
+    };
+  }
+
   const sourceText = `${title}\n${contentItems.join("\n")}`;
   const normalizedSource = normalizeComparableText(sourceText);
   const scored = DYNAMIC_CLASSIFICATION_RULES.map((rule) => {
@@ -323,6 +424,7 @@ function classifyDynamicEntry(title, contentItems) {
   return {
     ok: true,
     label: scored[0].label,
+    contractor: sanitizeText(title),
     anchor,
     score: scored[0].score,
     matchedKeywords: scored[0].matchedKeywords,
@@ -489,13 +591,15 @@ function addParsedEntry(draft, entry, count, summary, sourceTitle) {
   }
 }
 
-function createDynamicEntryKey(anchorKey, contractor) {
+function createDynamicEntryKey(anchorKey, label, contractor) {
+  const normalizedLabel = normalizeComparableText(label).slice(0, 16) || "unknownlabel";
   const normalizedContractor = normalizeComparableText(contractor).slice(0, 24) || "unknown";
-  return `dynamic_${anchorKey}_${normalizedContractor}`;
+  return `dynamic_${anchorKey}_${normalizedLabel}_${normalizedContractor}`;
 }
 
 function addDynamicEntry(draft, classification, contractor, count, summary, sourceTitle) {
-  const key = createDynamicEntryKey(classification.anchor.key, contractor);
+  const targetContractor = sanitizeText(classification.contractor || contractor);
+  const key = createDynamicEntryKey(classification.anchor.key, classification.label, targetContractor);
   if (!draft.dynamicEntries) draft.dynamicEntries = [];
 
   const existing = draft.dynamicEntries.find((item) => item.key === key);
@@ -513,11 +617,12 @@ function addDynamicEntry(draft, classification, contractor, count, summary, sour
       anchorRow: classification.anchor.row,
       group: classification.anchor.group,
       label: classification.label,
-      contractor,
+      contractor: targetContractor,
       count,
       summary,
       sources: [sourceTitle],
       matchedKeywords: classification.matchedKeywords || [],
+      needsReview: Boolean(classification.needsReview),
       isDynamic: true,
     });
   }
@@ -537,14 +642,27 @@ function addDynamicEntry(draft, classification, contractor, count, summary, sour
       anchorKey: classification.anchor.key,
       anchorRow: classification.anchor.row,
       label: classification.label,
-      contractor,
+      contractor: targetContractor,
       count,
       summary,
       sources: [sourceTitle],
       matchedKeywords: classification.matchedKeywords || [],
+      needsReview: Boolean(classification.needsReview),
       isDynamic: true,
     });
   }
+}
+
+function createPendingClassification() {
+  const anchor = ENTRY_ANCHOR_BY_LABEL.get("什項") || ENTRY_CONFIG[0];
+  return {
+    ok: true,
+    label: "待確認",
+    anchor,
+    score: 0,
+    matchedKeywords: [],
+    needsReview: true,
+  };
 }
 
 function parseStandaloneEntryLine(draft, line) {
@@ -586,11 +704,7 @@ function parseBlock(draft, block) {
       return;
     }
 
-    draft.ambiguousBlocks.push({
-      title: block.title,
-      content: content.join("; "),
-      reason: classification.reason || block.reason || "未能確定模板行。",
-    });
+    addDynamicEntry(draft, createPendingClassification(), block.title, count, content.join("; "), block.title);
     return;
   }
 
@@ -870,6 +984,7 @@ export function serializeDraftForJson(draft) {
       count: entry.count,
       summary: entry.summary,
       matchedKeywords: [...(entry.matchedKeywords || [])],
+      needsReview: Boolean(entry.needsReview),
     })),
     ignoredLines: [...(draft.ignoredLines || [])],
     ambiguousBlocks: [...(draft.ambiguousBlocks || [])],

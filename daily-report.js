@@ -102,6 +102,7 @@ function scheduleParse() {
 }
 
 function runRawParse(message = "整理完成") {
+  const rawInputState = captureRawInputState();
   const activeDate = getActivePreviewDate();
   const result = parseRawTextToDraft(getActiveReport().rawText, state.draft, {
     reportDate: activeDate,
@@ -110,7 +111,7 @@ function runRawParse(message = "整理完成") {
   state.draft = result.draft;
   state.message = message;
   state.error = "";
-  render();
+  render({ rawInputState });
 }
 
 function clearInput() {
@@ -242,6 +243,7 @@ function renderCheckPane() {
   const weatherFilledCount = getWeatherFilledCount(selectedDates);
   const activeReport = getActiveReport();
   const activeEntries = activeReport.parsedEntries.length;
+  const pendingLineHeadCount = activeReport.parsedEntries.filter((entry) => entry.needsReview).length;
   const ignoredCount = activeReport.ignoredLines.length;
   const ambiguousCount = activeReport.ambiguousBlocks.length;
   const allWeatherFilled = selectedDates.length > 0 && weatherFilledCount === selectedDates.length;
@@ -276,6 +278,9 @@ function renderCheckPane() {
         </div>
         <div class="${ambiguousCount ? "is-attention" : "is-ok"}">
           <strong>需確認</strong><span>${ambiguousCount}項</span>
+        </div>
+        <div class="${pendingLineHeadCount ? "is-attention" : "is-ok"}">
+          <strong>待確認行頭</strong><span>${pendingLineHeadCount}項</span>
         </div>
       </div>
       ${detailErrors.length ? `<div class="dr-issue-block">${detailErrors.map((item) => `<p>${escapeHtml(item)}</p>`).join("")}</div>` : ""}
@@ -380,7 +385,36 @@ function renderSheetPreview(preview) {
   `;
 }
 
-function render() {
+function captureRawInputState() {
+  const target = document.activeElement;
+  if (!(target instanceof HTMLTextAreaElement)) return null;
+  if (target.dataset.kind !== "raw-text") return null;
+
+  return {
+    selectionStart: target.selectionStart,
+    selectionEnd: target.selectionEnd,
+    scrollTop: target.scrollTop,
+    windowScrollX: window.scrollX,
+    windowScrollY: window.scrollY,
+  };
+}
+
+function restoreRawInputState(rawInputState) {
+  if (!rawInputState) return;
+  const target = app.querySelector('textarea[data-kind="raw-text"]');
+  if (!(target instanceof HTMLTextAreaElement)) return;
+
+  target.focus({ preventScroll: true });
+  const textLength = target.value.length;
+  target.setSelectionRange(
+    Math.min(rawInputState.selectionStart, textLength),
+    Math.min(rawInputState.selectionEnd, textLength),
+  );
+  target.scrollTop = rawInputState.scrollTop;
+  window.scrollTo(rawInputState.windowScrollX, rawInputState.windowScrollY);
+}
+
+function render(options = {}) {
   app.innerHTML = `
     <main class="dr-shell">
       ${renderHeader()}
@@ -391,6 +425,7 @@ function render() {
       </div>
     </main>
   `;
+  restoreRawInputState(options.rawInputState);
 }
 
 async function getTemplateArrayBuffer() {
