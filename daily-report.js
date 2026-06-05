@@ -42,6 +42,7 @@ let templateBufferPromise = null;
 let excelJsModulePromise = null;
 let lastObjectUrl = "";
 let autoparseTimer = 0;
+let isComposingRawInput = false;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -95,6 +96,7 @@ function setActiveRawText(rawText) {
 }
 
 function scheduleParse() {
+  if (isComposingRawInput) return;
   window.clearTimeout(autoparseTimer);
   autoparseTimer = window.setTimeout(() => {
     runRawParse("自動整理完成");
@@ -102,6 +104,7 @@ function scheduleParse() {
 }
 
 function runRawParse(message = "整理完成") {
+  if (isComposingRawInput) return;
   const rawInputState = captureRawInputState();
   const activeDate = getActivePreviewDate();
   const result = parseRawTextToDraft(getActiveReport().rawText, state.draft, {
@@ -579,6 +582,24 @@ app.addEventListener("input", (event) => {
   if (!(target instanceof HTMLTextAreaElement)) return;
   if (target.dataset.kind !== "raw-text") return;
   setActiveRawText(target.value);
+  if (event.isComposing || isComposingRawInput) return;
+  scheduleParse();
+});
+
+app.addEventListener("compositionstart", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLTextAreaElement)) return;
+  if (target.dataset.kind !== "raw-text") return;
+  isComposingRawInput = true;
+  window.clearTimeout(autoparseTimer);
+});
+
+app.addEventListener("compositionend", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLTextAreaElement)) return;
+  if (target.dataset.kind !== "raw-text") return;
+  isComposingRawInput = false;
+  setActiveRawText(target.value);
   scheduleParse();
 });
 
@@ -589,7 +610,7 @@ app.addEventListener("click", (event) => {
   if (!actionTarget) return;
 
   const action = actionTarget.dataset.action;
-  if (action === "parse") runRawParse("整理完成");
+  if (action === "parse" && !isComposingRawInput) runRawParse("整理完成");
   if (action === "clear") clearInput();
   if (action === "export") exportWorkbook();
   if (action === "toggle-date") toggleDate(actionTarget.dataset.date || "");

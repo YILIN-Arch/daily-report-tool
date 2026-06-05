@@ -1139,21 +1139,36 @@ function getRowMergeModels(worksheet, rowNumber) {
     .map((model) => ({ ...model }));
 }
 
-function hasOverlappingMerge(worksheet, model) {
-  return Object.values(worksheet._merges || {})
-    .map((merge) => merge?.model)
+function getMergeModelsIntersectingRow(worksheet, rowNumber) {
+  return Object.entries(worksheet._merges || {})
+    .map(([address, merge]) => ({ address, model: merge?.model }))
     .filter(Boolean)
-    .some((existing) => {
-      const rowOverlaps = existing.top <= model.bottom && existing.bottom >= model.top;
-      const columnOverlaps = existing.left <= model.right && existing.right >= model.left;
-      return rowOverlaps && columnOverlaps;
-    });
+    .filter(({ model }) => model && model.top <= rowNumber && model.bottom >= rowNumber)
+    .map(({ address, model }) => ({ address, ...model }));
+}
+
+function resetMergesIntersectingRow(worksheet, rowNumber) {
+  for (const merge of getMergeModelsIntersectingRow(worksheet, rowNumber)) {
+    for (let row = merge.top; row <= merge.bottom; row += 1) {
+      for (let column = merge.left; column <= merge.right; column += 1) {
+        worksheet.getCell(row, column).unmerge();
+      }
+    }
+    delete worksheet._merges[merge.address];
+  }
+}
+
+function clearDynamicWritableCells(worksheet, rowNumber) {
+  for (let column = 2; column <= 30; column += 1) {
+    worksheet.getCell(rowNumber, column).value = null;
+  }
 }
 
 function copyRowLayout(worksheet, sourceRowNumber, targetRowNumber) {
   const sourceRow = worksheet.getRow(sourceRowNumber);
   const targetRow = worksheet.getRow(targetRowNumber);
   targetRow.height = sourceRow.height;
+  resetMergesIntersectingRow(worksheet, targetRowNumber);
 
   const maxColumn = Math.max(39, worksheet.actualColumnCount || 0);
   for (let column = 1; column <= maxColumn; column += 1) {
@@ -1162,22 +1177,15 @@ function copyRowLayout(worksheet, sourceRowNumber, targetRowNumber) {
     targetCell.value = cloneCellValue(sourceCell.value);
     targetCell.style = cloneCellStyle(sourceCell.style);
   }
+  clearDynamicWritableCells(worksheet, targetRowNumber);
 
   for (const merge of getRowMergeModels(worksheet, sourceRowNumber)) {
-    const targetMerge = {
-      top: targetRowNumber,
-      left: merge.left,
-      bottom: targetRowNumber,
-      right: merge.right,
-    };
-    if (!hasOverlappingMerge(worksheet, targetMerge)) {
-      worksheet.mergeCells(
-        targetRowNumber,
-        merge.left,
-        targetRowNumber,
-        merge.right,
-      );
-    }
+    worksheet.mergeCells(
+      targetRowNumber,
+      merge.left,
+      targetRowNumber,
+      merge.right,
+    );
   }
 }
 
