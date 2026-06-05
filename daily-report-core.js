@@ -10,6 +10,43 @@ import {
 const DAY_NUMBER_BASE_SERIAL = 44889;
 const ENTRY_BY_KEY = new Map(ENTRY_CONFIG.map((entry) => [entry.key, entry]));
 const ENTRY_BY_ROW = new Map(ENTRY_CONFIG.map((entry) => [entry.row, entry]));
+const ENTRY_ANCHOR_BY_LABEL = new Map();
+
+for (const entry of ENTRY_CONFIG) {
+  if (!ENTRY_ANCHOR_BY_LABEL.has(entry.label)) {
+    ENTRY_ANCHOR_BY_LABEL.set(entry.label, entry);
+  }
+}
+
+const DYNAMIC_CLASSIFICATION_RULES = [
+  { label: "水喉", keywords: ["水喉", "座廁", "坐廁", "龍頭", "去水", "駁喉", "面盤", "廁所腳", "喉"] },
+  { label: "電氣", keywords: ["電氣", "電燈", "燈喉", "走廊燈", "MCB", "駁線", "掣箱", "電掣", "清掣"] },
+  { label: "消防", keywords: ["消防", "消防頭", "消防喉", "花灑頭"] },
+  { label: "假天花", keywords: ["天花", "骨架", "封底板", "石膏板", "釘角", "底骨", "底板"] },
+  { label: "泥水", keywords: ["泥水", "泥底", "地台瓦", "牆身瓦", "廳地台", "廚房牆身", "廁所牆身", "批盪", "批蕩", "盪樓梯", "執平企直", "清場", "上料"] },
+  { label: "釘板", keywords: ["釘板", "出柱頭", "釘模", "板模", "木模"] },
+  { label: "油漆", keywords: ["油漆", "省油", "批灰", "製位批灰", "滑面", "批滑面"] },
+  { label: "鋁窗", keywords: ["鋁窗", "冷氣機窗", "窗仔", "唧膠"] },
+  { label: "門框", keywords: ["門框", "裝門", "單位門", "執釘窿"] },
+  { label: "廚櫃", keywords: ["廚櫃", "櫥櫃", "廚房櫃"] },
+  { label: "水櫃", keywords: ["水櫃"] },
+  { label: "鐵器", keywords: ["鐵器", "扶手", "欄杆", "鐵閘"] },
+  { label: "台面石", keywords: ["台面石", "檯面石"] },
+  { label: "雲石", keywords: ["雲石", "石屎", "石材"] },
+  { label: "玻璃欄河", keywords: ["玻璃欄河", "欄河", "欄杆玻璃"] },
+  { label: "玻璃幕牆", keywords: ["玻璃幕牆", "幕牆", "玻璃幕"] },
+  { label: "防水", keywords: ["防水", "試水", "滲水"] },
+  { label: "防火板", keywords: ["防火板"] },
+  { label: "弱電", keywords: ["弱電", "網線", "喉通", "線槽"] },
+  { label: "電訊商", keywords: ["電訊", "數碼通", "掣面"] },
+  { label: "大冷", keywords: ["大冷", "風槽", "風喉"] },
+  { label: "細冷", keywords: ["細冷", "銅喉", "散熱", "背板", "冷氣"] },
+  { label: "煤氣", keywords: ["煤氣", "氣喉"] },
+  { label: "浴屏", keywords: ["浴屏"] },
+  { label: "預制間牆板", keywords: ["預制間牆板", "間牆板"] },
+  { label: "墨斗", keywords: ["墨斗", "彈線"] },
+  { label: "什項", keywords: ["清垃圾", "打鑿", "打炮", "保護", "基仔"] },
+];
 
 const HEADCOUNT_KEY_ALIASES = {
   staffregular: "staffRegular",
@@ -47,6 +84,8 @@ function normalizeComparableText(value) {
   return String(value ?? "")
     .normalize("NFKC")
     .replace(/凎/g, "淦")
+    .replace(/恆/g, "恒")
+    .replace(/拓高/g, "托高")
     .replace(/[\s_/()（）\-]+/g, "")
     .replace(/[：:;,，。；]/g, "")
     .toLowerCase();
@@ -68,6 +107,7 @@ function createEmptyReport() {
   return {
     rawText: "",
     entries: ENTRY_CONFIG.map((entry) => createEntryDraft(entry)),
+    dynamicEntries: [],
     parsedEntries: [],
     ignoredLines: [],
     ambiguousBlocks: [],
@@ -86,9 +126,15 @@ function cloneReport(report = {}) {
         summary: coerceValueToString(existing.summary),
       };
     }),
+    dynamicEntries: (report.dynamicEntries || []).map((entry) => ({
+      ...entry,
+      sources: [...(entry.sources || [])],
+      matchedKeywords: [...(entry.matchedKeywords || [])],
+    })),
     parsedEntries: (report.parsedEntries || []).map((entry) => ({
       ...entry,
       sources: [...(entry.sources || [])],
+      matchedKeywords: [...(entry.matchedKeywords || [])],
     })),
     ignoredLines: [...(report.ignoredLines || [])],
     ambiguousBlocks: (report.ambiguousBlocks || []).map((block) => ({ ...block })),
@@ -99,6 +145,7 @@ function reportFromDraft(draft, rawText = "") {
   return cloneReport({
     rawText,
     entries: draft.entries,
+    dynamicEntries: draft.dynamicEntries,
     parsedEntries: draft.parsedEntries,
     ignoredLines: draft.ignoredLines,
     ambiguousBlocks: draft.ambiguousBlocks,
@@ -110,6 +157,7 @@ function applyReportToDraft(draft, report) {
   return {
     ...draft,
     entries: nextReport.entries,
+    dynamicEntries: nextReport.dynamicEntries,
     parsedEntries: nextReport.parsedEntries,
     ignoredLines: nextReport.ignoredLines,
     ambiguousBlocks: nextReport.ambiguousBlocks,
@@ -141,6 +189,7 @@ function appendDistinctSummary(existing, next) {
 function resetParsedDraft(baseDraft) {
   const nextDraft = cloneDraft(baseDraft);
   nextDraft.entries = ENTRY_CONFIG.map((entry) => createEntryDraft(entry));
+  nextDraft.dynamicEntries = [];
   nextDraft.parsedEntries = [];
   nextDraft.ignoredLines = [];
   nextDraft.ambiguousBlocks = [];
@@ -190,6 +239,16 @@ function hasPeopleCount(line) {
   return /\d+\s*人/.test(line);
 }
 
+function isUnknownHeaderCandidate(line) {
+  const text = sanitizeText(line);
+  if (!text || hasPeopleCount(text)) return false;
+  if (text.length > 18) return false;
+  if (/[；;，,。:：|｜]/.test(text)) return false;
+  if (/\d+\s*\/?\s*f/i.test(text)) return false;
+  if (/^(日期|上午|下午|天氣|weather|date)$/i.test(text)) return false;
+  return /[\p{Script=Han}A-Za-z]/u.test(text);
+}
+
 function splitWorkItems(lines) {
   return lines
     .join("\n")
@@ -215,6 +274,59 @@ function countPeopleInText(text) {
     (sum, match) => sum + Number(match[1]),
     0,
   );
+}
+
+function classifyDynamicEntry(title, contentItems) {
+  const sourceText = `${title}\n${contentItems.join("\n")}`;
+  const normalizedSource = normalizeComparableText(sourceText);
+  const scored = DYNAMIC_CLASSIFICATION_RULES.map((rule) => {
+    const matchedKeywords = [];
+    let score = 0;
+    for (const keyword of rule.keywords) {
+      const normalizedKeyword = normalizeComparableText(keyword);
+      if (normalizedKeyword && normalizedSource.includes(normalizedKeyword)) {
+        matchedKeywords.push(keyword);
+        score += Math.max(1, Math.min(3, normalizedKeyword.length));
+      }
+    }
+    if (normalizedSource.includes(normalizeComparableText(rule.label))) {
+      matchedKeywords.push(rule.label);
+      score += 4;
+    }
+    return { ...rule, score, matchedKeywords: [...new Set(matchedKeywords)] };
+  })
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score);
+
+  if (!scored.length) {
+    return {
+      ok: false,
+      reason: "未能根據工作內容判斷工種，請補充更明確的工種描述。",
+    };
+  }
+
+  if (scored[1] && scored[0].score === scored[1].score) {
+    return {
+      ok: false,
+      reason: `工作內容同時匹配「${scored[0].label}」和「${scored[1].label}」，請手動拆分或補充工種。`,
+    };
+  }
+
+  const anchor = ENTRY_ANCHOR_BY_LABEL.get(scored[0].label);
+  if (!anchor) {
+    return {
+      ok: false,
+      reason: `已判斷為「${scored[0].label}」，但樣板內沒有可複製的工種行。`,
+    };
+  }
+
+  return {
+    ok: true,
+    label: scored[0].label,
+    anchor,
+    score: scored[0].score,
+    matchedKeywords: scored[0].matchedKeywords,
+  };
 }
 
 function cleanupStandaloneSummary(line, entry) {
@@ -377,6 +489,64 @@ function addParsedEntry(draft, entry, count, summary, sourceTitle) {
   }
 }
 
+function createDynamicEntryKey(anchorKey, contractor) {
+  const normalizedContractor = normalizeComparableText(contractor).slice(0, 24) || "unknown";
+  return `dynamic_${anchorKey}_${normalizedContractor}`;
+}
+
+function addDynamicEntry(draft, classification, contractor, count, summary, sourceTitle) {
+  const key = createDynamicEntryKey(classification.anchor.key, contractor);
+  if (!draft.dynamicEntries) draft.dynamicEntries = [];
+
+  const existing = draft.dynamicEntries.find((item) => item.key === key);
+  if (existing) {
+    existing.count += count;
+    existing.summary = appendDistinctSummary(existing.summary, summary);
+    existing.sources.push(sourceTitle);
+    existing.matchedKeywords = [
+      ...new Set([...(existing.matchedKeywords || []), ...(classification.matchedKeywords || [])]),
+    ];
+  } else {
+    draft.dynamicEntries.push({
+      key,
+      anchorKey: classification.anchor.key,
+      anchorRow: classification.anchor.row,
+      group: classification.anchor.group,
+      label: classification.label,
+      contractor,
+      count,
+      summary,
+      sources: [sourceTitle],
+      matchedKeywords: classification.matchedKeywords || [],
+      isDynamic: true,
+    });
+  }
+
+  const existingParsed = draft.parsedEntries.find((item) => item.key === key);
+  if (existingParsed) {
+    existingParsed.count += count;
+    existingParsed.summary = appendDistinctSummary(existingParsed.summary, summary);
+    existingParsed.sources.push(sourceTitle);
+    existingParsed.matchedKeywords = [
+      ...new Set([...(existingParsed.matchedKeywords || []), ...(classification.matchedKeywords || [])]),
+    ];
+  } else {
+    draft.parsedEntries.push({
+      key,
+      row: classification.anchor.row + 0.1,
+      anchorKey: classification.anchor.key,
+      anchorRow: classification.anchor.row,
+      label: classification.label,
+      contractor,
+      count,
+      summary,
+      sources: [sourceTitle],
+      matchedKeywords: classification.matchedKeywords || [],
+      isDynamic: true,
+    });
+  }
+}
+
 function parseStandaloneEntryLine(draft, line) {
   const match = matchEntryFromText(line);
   if (match.ambiguous) {
@@ -395,10 +565,31 @@ function parseBlock(draft, block) {
   if (!block) return;
   const content = splitWorkItems(block.lines);
   if (!block.entry) {
+    if (block.ambiguous) {
+      draft.ambiguousBlocks.push({
+        title: block.title,
+        content: content.join("; "),
+        reason: block.reason || "未能確定模板行。",
+      });
+      return;
+    }
+
+    if (!content.length) {
+      draft.ignoredLines.push(block.title);
+      return;
+    }
+
+    const count = content.reduce((sum, item) => sum + countPeopleInText(item), 0);
+    const classification = classifyDynamicEntry(block.title, content);
+    if (classification.ok) {
+      addDynamicEntry(draft, classification, block.title, count, content.join("; "), block.title);
+      return;
+    }
+
     draft.ambiguousBlocks.push({
       title: block.title,
       content: content.join("; "),
-      reason: block.reason || "未能確定模板行。",
+      reason: classification.reason || block.reason || "未能確定模板行。",
     });
     return;
   }
@@ -436,12 +627,15 @@ function parseRawTextBlocks(rawText, baseDraft, options = {}) {
     }
 
     const headerMatch = matchEntryFromText(line);
-    const looksLikeHeader = !hasPeopleCount(line) && (headerMatch.entry || headerMatch.ambiguous);
+    const looksLikeHeader =
+      !hasPeopleCount(line) &&
+      (headerMatch.entry || headerMatch.ambiguous || isUnknownHeaderCandidate(line));
     if (looksLikeHeader) {
       parseBlock(draft, currentBlock);
       currentBlock = {
         title: line,
         entry: headerMatch.entry,
+        ambiguous: headerMatch.ambiguous,
         reason: headerMatch.reason,
         lines: [],
       };
@@ -532,6 +726,7 @@ export function createEmptyDraft(defaultDate = todayLocalIso()) {
       SIGNATORY_FIELDS.map((field) => [field.key, field.defaultValue || ""]),
     ),
     entries: ENTRY_CONFIG.map((entry) => createEntryDraft(entry)),
+    dynamicEntries: [],
     parsedEntries: [],
     ignoredLines: [],
     ambiguousBlocks: [],
@@ -555,9 +750,15 @@ export function cloneDraft(draft) {
     headcount: { ...draft.headcount },
     signatories: { ...draft.signatories },
     entries: (draft.entries || []).map((entry) => ({ ...entry })),
+    dynamicEntries: (draft.dynamicEntries || []).map((entry) => ({
+      ...entry,
+      sources: [...(entry.sources || [])],
+      matchedKeywords: [...(entry.matchedKeywords || [])],
+    })),
     parsedEntries: (draft.parsedEntries || []).map((entry) => ({
       ...entry,
       sources: [...(entry.sources || [])],
+      matchedKeywords: [...(entry.matchedKeywords || [])],
     })),
     ignoredLines: [...(draft.ignoredLines || [])],
     ambiguousBlocks: (draft.ambiguousBlocks || []).map((block) => ({ ...block })),
@@ -660,6 +861,16 @@ export function serializeDraftForJson(draft) {
         count: entry.count,
         summary: entry.summary,
       })),
+    dynamicEntries: (draft.dynamicEntries || []).map((entry) => ({
+      key: entry.key,
+      anchorKey: entry.anchorKey,
+      anchorRow: entry.anchorRow,
+      label: entry.label,
+      contractor: entry.contractor,
+      count: entry.count,
+      summary: entry.summary,
+      matchedKeywords: [...(entry.matchedKeywords || [])],
+    })),
     ignoredLines: [...(draft.ignoredLines || [])],
     ambiguousBlocks: [...(draft.ambiguousBlocks || [])],
     reportsByDate: Object.fromEntries(
@@ -710,6 +921,12 @@ export function validateDraft(draft) {
       summarySegmentsByDate[date][entry.key] = summaryResult.segments;
       if (!summarySegmentsByKey[entry.key]) summarySegmentsByKey[entry.key] = summaryResult.segments;
     }
+
+    for (const entry of scopedDraft.dynamicEntries || []) {
+      const count = parseIntegerString(entry.count);
+      if (!count.ok) errors.push(`${entry.label} / ${entry.contractor} 的人數只能填非負整數。`);
+      if (sanitizeText(entry.count) || sanitizeText(entry.summary)) hasAnyEntry = true;
+    }
   }
 
   if (!hasAnyEntry) warnings.push("目前未識別到判頭工種。");
@@ -743,6 +960,18 @@ export function getPreviewModel(draft, previewDate = "") {
   const dates = sortDates(draft.selectedDates || []);
   const date = canonicalizeDate(previewDate) || dates[0] || todayLocalIso();
   const scopedDraft = getDraftForDate(draft, date);
+  const fixedEntries = scopedDraft.entries.filter((entry) => sanitizeText(entry.count) || sanitizeText(entry.summary));
+  const dynamicEntries = (scopedDraft.dynamicEntries || []).filter(
+    (entry) => sanitizeText(entry.count) || sanitizeText(entry.summary),
+  );
+  const entries = [...fixedEntries, ...dynamicEntries].sort((left, right) => {
+    const leftRow = Number(left.row || left.anchorRow || 999);
+    const rightRow = Number(right.row || right.anchorRow || 999);
+    if (leftRow !== rightRow) return leftRow - rightRow;
+    if (left.isDynamic !== right.isDynamic) return left.isDynamic ? 1 : -1;
+    return 0;
+  });
+
   return {
     date,
     sheetName: getSheetNameForDate(date),
@@ -752,7 +981,7 @@ export function getPreviewModel(draft, previewDate = "") {
       ...field,
       value: draft.headcount[field.key] || "0",
     })),
-    entries: scopedDraft.entries.filter((entry) => sanitizeText(entry.count) || sanitizeText(entry.summary)),
+    entries,
   };
 }
 
@@ -777,6 +1006,122 @@ export function resetWorksheetEditableCells(worksheet) {
   }
 }
 
+function cloneCellValue(value) {
+  if (value === null || value === undefined) return value;
+  if (value instanceof Date) return new Date(value.getTime());
+  if (typeof value === "object") return JSON.parse(JSON.stringify(value));
+  return value;
+}
+
+function cloneCellStyle(style) {
+  return style ? JSON.parse(JSON.stringify(style)) : {};
+}
+
+function getRowMergeModels(worksheet, rowNumber) {
+  return Object.values(worksheet._merges || {})
+    .map((merge) => merge?.model)
+    .filter((model) => model && model.top === rowNumber && model.bottom === rowNumber)
+    .map((model) => ({ ...model }));
+}
+
+function hasOverlappingMerge(worksheet, model) {
+  return Object.values(worksheet._merges || {})
+    .map((merge) => merge?.model)
+    .filter(Boolean)
+    .some((existing) => {
+      const rowOverlaps = existing.top <= model.bottom && existing.bottom >= model.top;
+      const columnOverlaps = existing.left <= model.right && existing.right >= model.left;
+      return rowOverlaps && columnOverlaps;
+    });
+}
+
+function copyRowLayout(worksheet, sourceRowNumber, targetRowNumber) {
+  const sourceRow = worksheet.getRow(sourceRowNumber);
+  const targetRow = worksheet.getRow(targetRowNumber);
+  targetRow.height = sourceRow.height;
+
+  const maxColumn = Math.max(39, worksheet.actualColumnCount || 0);
+  for (let column = 1; column <= maxColumn; column += 1) {
+    const sourceCell = worksheet.getCell(sourceRowNumber, column);
+    const targetCell = worksheet.getCell(targetRowNumber, column);
+    targetCell.value = cloneCellValue(sourceCell.value);
+    targetCell.style = cloneCellStyle(sourceCell.style);
+  }
+
+  for (const merge of getRowMergeModels(worksheet, sourceRowNumber)) {
+    const targetMerge = {
+      top: targetRowNumber,
+      left: merge.left,
+      bottom: targetRowNumber,
+      right: merge.right,
+    };
+    if (!hasOverlappingMerge(worksheet, targetMerge)) {
+      worksheet.mergeCells(
+        targetRowNumber,
+        merge.left,
+        targetRowNumber,
+        merge.right,
+      );
+    }
+  }
+}
+
+function writeDynamicEntryRow(worksheet, rowNumber, entry) {
+  worksheet.getCell(`B${rowNumber}`).value = sanitizeText(entry.label);
+  worksheet.getCell(`E${rowNumber}`).value = sanitizeText(entry.contractor);
+  worksheet.getCell(`H${rowNumber}`).value = Number(entry.count || 0) || null;
+
+  const summaryCell = worksheet.getCell(`K${rowNumber}`);
+  summaryCell.value = sanitizeText(entry.summary) || null;
+  summaryCell.alignment = {
+    ...summaryCell.alignment,
+    horizontal: "left",
+    vertical: "top",
+    wrapText: true,
+    shrinkToFit: false,
+  };
+
+  const rowHeight = estimateSummaryRowHeight(entry.summary);
+  if (rowHeight) {
+    const row = worksheet.getRow(rowNumber);
+    row.height = Math.max(Number(row.height || 17.25), rowHeight);
+  }
+}
+
+function insertDynamicEntryRows(worksheet, dynamicEntries) {
+  const entries = [...(dynamicEntries || [])]
+    .filter((entry) => sanitizeText(entry.count) || sanitizeText(entry.summary))
+    .sort((left, right) => {
+      if (right.anchorRow !== left.anchorRow) return right.anchorRow - left.anchorRow;
+      return 0;
+    });
+
+  const groups = new Map();
+  for (const entry of entries) {
+    if (!groups.has(entry.anchorRow)) groups.set(entry.anchorRow, []);
+    groups.get(entry.anchorRow).push(entry);
+  }
+
+  let insertedBeforeSignatures = 0;
+  for (const [anchorRow, groupEntries] of [...groups.entries()].sort((left, right) => right[0] - left[0])) {
+    const insertAt = Number(anchorRow) + 1;
+    for (const entry of [...groupEntries].reverse()) {
+      worksheet.spliceRows(insertAt, 0, []);
+      copyRowLayout(worksheet, Number(anchorRow), insertAt);
+      writeDynamicEntryRow(worksheet, insertAt, entry);
+      if (insertAt <= 48) insertedBeforeSignatures += 1;
+    }
+  }
+
+  return insertedBeforeSignatures;
+}
+
+function shiftCellRow(cellAddress, rowOffset) {
+  const match = String(cellAddress).match(/^([A-Z]+)(\d+)$/);
+  if (!match) return cellAddress;
+  return `${match[1]}${Number(match[2]) + rowOffset}`;
+}
+
 export function applyDraftToWorksheet(worksheet, draft, validation = null, targetDate = "") {
   const nextValidation = validation || validateDraft(draft);
   if (!nextValidation.isValid) throw new Error(nextValidation.errors.join("\n"));
@@ -796,10 +1141,6 @@ export function applyDraftToWorksheet(worksheet, draft, validation = null, targe
   for (const field of HEADCOUNT_FIELDS) {
     const parsed = parseIntegerString(draft.headcount[field.key]);
     worksheet.getCell(field.cell).value = parsed.number ?? 0;
-  }
-
-  for (const field of SIGNATORY_FIELDS) {
-    worksheet.getCell(field.cell).value = sanitizeText(draft.signatories[field.key]);
   }
 
   for (const entry of scopedDraft.entries) {
@@ -828,5 +1169,13 @@ export function applyDraftToWorksheet(worksheet, draft, validation = null, targe
       const row = worksheet.getRow(entry.row);
       row.height = Math.max(Number(row.height || 17.25), rowHeight);
     }
+  }
+
+  const insertedBeforeSignatures = insertDynamicEntryRows(worksheet, scopedDraft.dynamicEntries);
+
+  for (const field of SIGNATORY_FIELDS) {
+    worksheet.getCell(shiftCellRow(field.cell, insertedBeforeSignatures)).value = sanitizeText(
+      draft.signatories[field.key],
+    );
   }
 }
