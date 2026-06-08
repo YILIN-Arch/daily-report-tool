@@ -1139,6 +1139,46 @@ function getRowMergeModels(worksheet, rowNumber) {
     .map((model) => ({ ...model }));
 }
 
+function captureTradeRowMergeLayouts(worksheet) {
+  return new Map(
+    ENTRY_CONFIG.map((entry) => [
+      entry.row,
+      getRowMergeModels(worksheet, entry.row).map((merge) => ({
+        left: merge.left,
+        right: merge.right,
+      })),
+    ]),
+  );
+}
+
+function captureGroupColumnLayouts(worksheet) {
+  const groupLayouts = new Map();
+  const groupKeys = [...new Set(ENTRY_CONFIG.map((entry) => entry.group))];
+
+  for (const groupKey of groupKeys) {
+    const firstEntry = ENTRY_CONFIG.find((entry) => entry.group === groupKey);
+    if (!firstEntry) continue;
+
+    const merge = Object.values(worksheet._merges || {})
+      .map((item) => item?.model)
+      .find(
+        (model) =>
+          model &&
+          model.left === 1 &&
+          model.right === 1 &&
+          model.top <= firstEntry.row &&
+          model.bottom >= firstEntry.row,
+      );
+    const sourceCell = worksheet.getCell(merge?.top || firstEntry.row, 1);
+    groupLayouts.set(groupKey, {
+      value: cloneCellValue(sourceCell.value),
+      style: cloneCellStyle(sourceCell.style),
+    });
+  }
+
+  return groupLayouts;
+}
+
 function getMergeModelsIntersectingRow(worksheet, rowNumber) {
   return Object.entries(worksheet._merges || {})
     .map(([address, merge]) => ({ address, model: merge?.model }))
@@ -1149,6 +1189,7 @@ function getMergeModelsIntersectingRow(worksheet, rowNumber) {
 
 function resetMergesIntersectingRow(worksheet, rowNumber) {
   for (const merge of getMergeModelsIntersectingRow(worksheet, rowNumber)) {
+    if (merge.top !== merge.bottom && merge.left === merge.right) continue;
     for (let row = merge.top; row <= merge.bottom; row += 1) {
       for (let column = merge.left; column <= merge.right; column += 1) {
         worksheet.getCell(row, column).unmerge();
@@ -1164,7 +1205,18 @@ function clearDynamicWritableCells(worksheet, rowNumber) {
   }
 }
 
-function copyRowLayout(worksheet, sourceRowNumber, targetRowNumber) {
+function mergeRowRanges(worksheet, rowNumber, mergeRanges) {
+  for (const merge of mergeRanges) {
+    worksheet.mergeCells(
+      rowNumber,
+      merge.left,
+      rowNumber,
+      merge.right,
+    );
+  }
+}
+
+function copyRowLayout(worksheet, sourceRowNumber, targetRowNumber, mergeLayouts) {
   const sourceRow = worksheet.getRow(sourceRowNumber);
   const targetRow = worksheet.getRow(targetRowNumber);
   targetRow.height = sourceRow.height;
@@ -1178,15 +1230,7 @@ function copyRowLayout(worksheet, sourceRowNumber, targetRowNumber) {
     targetCell.style = cloneCellStyle(sourceCell.style);
   }
   clearDynamicWritableCells(worksheet, targetRowNumber);
-
-  for (const merge of getRowMergeModels(worksheet, sourceRowNumber)) {
-    worksheet.mergeCells(
-      targetRowNumber,
-      merge.left,
-      targetRowNumber,
-      merge.right,
-    );
-  }
+  mergeRowRanges(worksheet, targetRowNumber, mergeLayouts.get(sourceRowNumber) || []);
 }
 
 function writeDynamicEntryRow(worksheet, rowNumber, entry) {
@@ -1211,7 +1255,7 @@ function writeDynamicEntryRow(worksheet, rowNumber, entry) {
   }
 }
 
-function insertDynamicEntryRows(worksheet, dynamicEntries) {
+function insertDynamicEntryRows(worksheet, dynamicEntries, mergeLayouts) {
   const entries = [...(dynamicEntries || [])]
     .filter((entry) => sanitizeText(entry.count) || sanitizeText(entry.summary))
     .sort((left, right) => {
@@ -1225,18 +1269,97 @@ function insertDynamicEntryRows(worksheet, dynamicEntries) {
     groups.get(entry.anchorRow).push(entry);
   }
 
-  let insertedBeforeSignatures = 0;
+  const insertedRows = [];
+  for (const [anchorRow, groupEntries] of groups.entries()) {
+    const lowerAnchorOffset = entries.filter((entry) => Number(entry.anchorRow) < Number(anchorRow)).length;
+    groupEntries.forEach((entry, index) => {
+      insertedRows.push({
+        anchorRow: Number(anchorRow),
+        row: Number(anchorRow) + 1 + lowerAnchorOffset + index,
+        group: entry.group,
+      });
+    });
+  }
+
+  let insertedBeforeSignatures = insertedRows.filter((inserted) => inserted.row <= 48).length;
   for (const [anchorRow, groupEntries] of [...groups.entries()].sort((left, right) => right[0] - left[0])) {
     const insertAt = Number(anchorRow) + 1;
     for (const entry of [...groupEntries].reverse()) {
       worksheet.spliceRows(insertAt, 0, []);
-      copyRowLayout(worksheet, Number(anchorRow), insertAt);
+      copyRowLayout(worksheet, Number(anchorRow), insertAt, mergeLayouts);
       writeDynamicEntryRow(worksheet, insertAt, entry);
-      if (insertAt <= 48) insertedBeforeSignatures += 1;
     }
   }
 
-  return insertedBeforeSignatures;
+  return { insertedBeforeSignatures, insertedRows };
+}
+
+function getFinalTradeRow(originalRow, insertedRows) {
+  const offset = insertedRows.filter((inserted) => inserted.anchorRow < originalRow).length;
+  return originalRow + offset;
+}
+
+function repairTradeRowMerges(worksheet, mergeLayouts, insertedRows) {
+  const rowsToRepair = new Map();
+  for (const entry of ENTRY_CONFIG) {
+    rowsToRepair.set(getFinalTradeRow(entry.row, insertedRows), mergeLayouts.get(entry.row) || []);
+  }
+  for (const inserted of insertedRows) {
+    rowsToRepair.set(inserted.row, mergeLayouts.get(inserted.anchorRow) || []);
+  }
+
+  for (const [rowNumber, mergeRanges] of [...rowsToRepair.entries()].sort((left, right) => left[0] - right[0])) {
+    resetMergesIntersectingRow(worksheet, rowNumber);
+    mergeRowRanges(worksheet, rowNumber, mergeRanges);
+  }
+}
+
+function resetColumnAMergesInTradeArea(worksheet, firstRow, lastRow) {
+  const merges = Object.entries(worksheet._merges || {})
+    .map(([address, merge]) => ({ address, model: merge?.model }))
+    .filter(
+      ({ model }) =>
+        model &&
+        model.left === 1 &&
+        model.right === 1 &&
+        model.top <= lastRow &&
+        model.bottom >= firstRow,
+    );
+
+  for (const merge of merges) {
+    for (let row = merge.model.top; row <= merge.model.bottom; row += 1) {
+      worksheet.getCell(row, 1).unmerge();
+    }
+    delete worksheet._merges[merge.address];
+  }
+}
+
+function repairGroupColumnMerges(worksheet, groupLayouts, insertedRows) {
+  const rowsByGroup = new Map();
+  for (const entry of ENTRY_CONFIG) {
+    const row = getFinalTradeRow(entry.row, insertedRows);
+    if (!rowsByGroup.has(entry.group)) rowsByGroup.set(entry.group, []);
+    rowsByGroup.get(entry.group).push(row);
+  }
+  for (const inserted of insertedRows) {
+    if (!inserted.group) continue;
+    if (!rowsByGroup.has(inserted.group)) rowsByGroup.set(inserted.group, []);
+    rowsByGroup.get(inserted.group).push(inserted.row);
+  }
+
+  const allRows = [...rowsByGroup.values()].flat();
+  if (!allRows.length) return;
+  resetColumnAMergesInTradeArea(worksheet, Math.min(...allRows), Math.max(...allRows));
+
+  for (const [groupKey, rows] of rowsByGroup.entries()) {
+    const top = Math.min(...rows);
+    const bottom = Math.max(...rows);
+    const layout = groupLayouts.get(groupKey) || {};
+    worksheet.mergeCells(top, 1, bottom, 1);
+    const cell = worksheet.getCell(top, 1);
+    cell.value = cloneCellValue(layout.value);
+    cell.style = cloneCellStyle(layout.style);
+  }
 }
 
 function shiftCellRow(cellAddress, rowOffset) {
@@ -1252,6 +1375,8 @@ export function applyDraftToWorksheet(worksheet, draft, validation = null, targe
   const date = canonicalizeDate(targetDate) || nextValidation.dates[0];
   const scopedDraft = getDraftForDate(draft, date);
   const [year, month, day] = date.split("-").map(Number);
+  const tradeRowMergeLayouts = captureTradeRowMergeLayouts(worksheet);
+  const groupColumnLayouts = captureGroupColumnLayouts(worksheet);
   resetWorksheetEditableCells(worksheet);
 
   const weather = getWeatherForDate(draft, date);
@@ -1294,7 +1419,13 @@ export function applyDraftToWorksheet(worksheet, draft, validation = null, targe
     }
   }
 
-  const insertedBeforeSignatures = insertDynamicEntryRows(worksheet, scopedDraft.dynamicEntries);
+  const { insertedBeforeSignatures, insertedRows } = insertDynamicEntryRows(
+    worksheet,
+    scopedDraft.dynamicEntries,
+    tradeRowMergeLayouts,
+  );
+  repairTradeRowMerges(worksheet, tradeRowMergeLayouts, insertedRows);
+  repairGroupColumnMerges(worksheet, groupColumnLayouts, insertedRows);
 
   for (const field of SIGNATORY_FIELDS) {
     worksheet.getCell(shiftCellRow(field.cell, insertedBeforeSignatures)).value = sanitizeText(
